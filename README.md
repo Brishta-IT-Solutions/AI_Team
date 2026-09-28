@@ -39,7 +39,7 @@ Runs on a Claude or ChatGPT plan are recorded as *covered by plan*, not as API s
 **Easiest — one command.** Install [Docker Desktop](https://www.docker.com/products/docker-desktop/), start it, then:
 
 ```bash
-git clone https://github.com/yaseinm/AI_Team.git
+git clone https://github.com/Brishta-IT-Solutions/AI_Team.git
 cd AI_Team
 docker compose up --build
 ```
