@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+"""Stand-in for `codex exec --json --output-schema ... -o ...` used by the end-to-end test."""
+import json, os, sys
+
+args = sys.argv[1:]
+assert args[0] == "exec" and "--output-schema" in args and "workspace-write" in args
+out = args[args.index("-o") + 1]
+prompt = sys.stdin.read()
+assert "developer's" in prompt and "reasoning" in prompt
+code = open("src/signin.js").read()
+os.makedirs(".aitc/evidence", exist_ok=True)
+open(".aitc/evidence/signin.txt", "w").write(code)
+renewal = "renew" in code
+spec_ids = [a["id"] for a in json.load(open(".aitc/spec.json"))["acceptance_criteria"]]
+report = {
+    "criteria_results": [
+        {"ac_id": ac, "result": "PASS" if (ac != "AC-4" or renewal) else "FAIL",
+         "evidence": [".aitc/evidence/signin.txt"], "notes": "checked against src/signin.js"}
+        for ac in spec_ids
+    ],
+    "suites": [],
+    "findings": [] if renewal else [{
+        "ac_id": "AC-4", "severity": "HIGH", "title": "Expired identity gets no renewal guidance",
+        "reproduction_steps": ["Call signIn with an expired identity"], "expected": "Renewal guidance",
+        "actual": "Identity expired", "test_command": "npm test"}],
+    "summary": "verified",
+}
+json.dump(report, open(out, "w"))
+print(json.dumps({"type": "item.completed", "item": {"type": "command_execution", "command": "npm test"}}))
+print(json.dumps({"type": "turn.completed", "usage": {"input_tokens": 300, "output_tokens": 80}}))
