@@ -24,22 +24,30 @@ The FRD's build order is *authorization, state guards and audit first*. That lay
 
 ## Run it
 
-Needs Python 3.11+, [uv](https://docs.astral.sh/uv/), Node 22 and Postgres 16.
+**Easiest — one command.** Install [Docker Desktop](https://www.docker.com/products/docker-desktop/), start it, then:
+
+```bash
+git clone https://github.com/yaseinm/AI_Team.git
+cd AI_Team
+docker compose up --build
+```
+
+The first build takes a few minutes. When the log shows `Uvicorn running`, open **http://localhost:3000**. Demo users, a project and three tickets are loaded automatically on the first start. Stop with `Ctrl+C`; `docker compose down -v` also wipes the data.
+
+Switch identity with **Acting as** in the header (development sign-in; OIDC replaces it). Try approving `PORTAL-2` as Product Lead — the gate refuses until its blocking question is resolved. The API and its interactive docs are at http://localhost:8000/docs.
+
+**For development** (hot reload; needs Python 3.11+, [uv](https://docs.astral.sh/uv/), Node 22):
 
 ```bash
 cp .env.example .env
-make infra     # Postgres + Redis in Docker (or use a local Postgres with user/db "aitc")
+make infra     # Postgres only, in Docker
 make setup     # install API + web dependencies
-make seed      # migrate, then create demo users, an active project and three tickets
-make api       # http://localhost:8000  (OpenAPI at /docs)
+make seed      # migrate, then load demo data
+make api       # http://localhost:8000
 make web       # http://localhost:3000
 ```
 
-Switch identity with **Acting as** in the header (development sign-in; OIDC replaces it). Try approving `PORTAL-2` as Product Lead — the gate refuses until its blocking question is resolved.
-
-```bash
-createdb -O aitc aitc_test && make check   # lint, migration drift check, tests
-```
+Tests: `docker compose exec postgres createdb -U aitc aitc_test && make check`.
 
 ## Layout
 

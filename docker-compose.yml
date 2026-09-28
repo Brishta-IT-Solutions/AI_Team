@@ -1,4 +1,5 @@
-# Local infrastructure. The API and web app run natively (see Makefile) for fast iteration.
+# One command to run everything:  docker compose up --build
+# Then open http://localhost:3000
 services:
   postgres:
     image: postgres:16
@@ -10,11 +11,31 @@ services:
     volumes: ["pgdata:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U aitc"]
-      interval: 5s
-      retries: 10
+      interval: 3s
+      retries: 20
+
+  api:
+    build: ./apps/api
+    environment:
+      AITC_ENV: development
+      AITC_DATABASE_URL: postgresql+psycopg://aitc:aitc@postgres:5432/aitc
+      AITC_DEV_AUTH_ENABLED: "true"
+      AITC_SEED: "true"  # demo users, project and tickets on first start
+    ports: ["8000:8000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build: ./apps/web
+    ports: ["3000:3000"]
+    depends_on: [api]
+
   redis:
-    # Reserved for the Celery job service (vertical-slice stage); unused by the foundation.
+    # Reserved for the Celery job service (next stage); not started by default.
     image: redis:7
     ports: ["6379:6379"]
+    profiles: ["jobs"]
+
 volumes:
   pgdata:

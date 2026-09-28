@@ -8,8 +8,8 @@ setup:            ## Install API and web dependencies
 	cd $(API) && uv venv -q .venv && uv pip install -q -p .venv -e ".[dev]"
 	cd $(WEB) && npm install --no-audit --no-fund
 
-infra:            ## Start Postgres (and Redis) in Docker
-	docker compose up -d postgres redis
+infra:            ## Start only Postgres in Docker (for running API and web natively)
+	docker compose up -d postgres
 
 migrate:
 	cd $(API) && .venv/bin/alembic upgrade head
