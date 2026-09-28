@@ -190,7 +190,8 @@ def authorize(principal: Principal, action: Action, project_id: str | None) -> A
     for role in roles:
         if action in HUMAN_GRANTS[role]:
             return AuthzDecision(True, f"granted by {role}")
-    return AuthzDecision(False, f"none of {sorted(roles)} grants {action}")
+    held = ", ".join(sorted(r.value for r in roles))
+    return AuthzDecision(False, f"role {held} does not grant {action}")
 
 
 def can_create_project(principal: Principal) -> AuthzDecision:

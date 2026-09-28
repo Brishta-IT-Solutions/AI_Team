@@ -17,7 +17,7 @@ export type TaskCard = {
 
 export type Board = { columns: { name: string; items: TaskCard[] }[] };
 
-export type PermittedAction = { command: string; allowed: boolean; reasons: string[] };
+export type PermittedAction = { command: string; allowed: boolean; authorized: boolean; reasons: string[] };
 
 export type AcceptanceCriterion = { id: string; statement: string; verification: string; mandatory: boolean };
 export type Question = { id: string; text: string; blocking: boolean; resolution: string | null };

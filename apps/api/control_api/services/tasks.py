@@ -484,7 +484,8 @@ def permitted_actions(ctx: Ctx, task: Task, project: Project) -> list[dict[str, 
         if trigger is not None:
             d = evaluate(stage, trigger, facts)
             reasons.extend(d.unmet)
-        out.append({"command": command, "allowed": not reasons, "reasons": reasons})
+        out.append({"command": command, "allowed": not reasons, "authorized": authz.allowed,
+                    "reasons": reasons})
 
     add("analyze", Action.TASK_ANALYZE, Trigger.START_ANALYSIS, [])
     add("approve_requirements", Action.APPROVE_REQUIREMENTS, Trigger.APPROVE_REQUIREMENTS, [])

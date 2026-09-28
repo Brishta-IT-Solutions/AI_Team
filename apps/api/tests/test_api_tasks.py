@@ -273,3 +273,13 @@ def test_task_list_cursor_pagination(api, project):
                     cursor=page1["next_cursor"]).json()
     keys = [t["key"] for t in page1["items"] + page2["items"]]
     assert len(keys) == 5 == len(set(keys)) and page2["next_cursor"] is None
+
+
+def test_permitted_actions_separate_role_from_state(api, task):
+    observer = {a["command"]: a for a in view(api, task["id"], who="observer")["permitted_actions"]}
+    assert not any(a["authorized"] for a in observer.values())
+    assert observer["cancel"]["reasons"] == ["role OBSERVER does not grant task.cancel"]
+    product = {a["command"]: a for a in view(api, task["id"])["permitted_actions"]}
+    assert product["analyze"]["allowed"] and product["analyze"]["authorized"]
+    assert product["approve_requirements"]["authorized"] and not product["approve_requirements"]["allowed"]
+    assert not product["approve_merge"]["authorized"]

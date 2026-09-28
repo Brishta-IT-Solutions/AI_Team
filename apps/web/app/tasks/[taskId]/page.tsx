@@ -233,11 +233,14 @@ const NEEDS_REASON = new Set(["request_changes", "cancel", "resume", "retry"]);
 function Actions({ view, onDone }: { view: TaskView; onDone: () => Promise<void> }) {
   const [active, setActive] = useState<PermittedAction | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
-  const relevant = view.permitted_actions.filter((a) => a.allowed || !a.reasons.some((r) => r.includes("not permitted from") || r.includes("is terminal") || r.startsWith("execution status")));
+  const authorized = view.permitted_actions.filter((a) => a.authorized);
+  // Hide actions this role can never take; explain the ones blocked only by the ticket's state.
+  const relevant = authorized.filter((a) => a.allowed || !a.reasons.some((r) => r.includes("not permitted from") || r.includes("is terminal") || r.startsWith("execution status")));
 
   return (
     <>
-      {relevant.length === 0 && <p className="muted small">No actions are available in this stage.</p>}
+      {authorized.length === 0 ? <p className="muted small">You have read-only access to this project.</p>
+        : relevant.length === 0 && <p className="muted small">No actions are available in this stage.</p>}
       {relevant.map((a) => (
         <div key={a.command} className="action">
           <button className={`btn ${a.command.startsWith("approve") ? "btn-primary" : a.command === "cancel" ? "btn-danger" : ""}`}
