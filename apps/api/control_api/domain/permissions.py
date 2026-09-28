@@ -67,6 +67,7 @@ class Action(StrEnum):
     RELEASE_RECORD_OUTCOME = "release.record_outcome"
     # Agent operations (broker-enforced)
     RUN_RESULT_SUBMIT = "run.result.submit"
+    RUN_CLAIM = "run.claim"
     CONTEXT_READ = "context.read"
     FEATURE_WORKSPACE_WRITE = "workspace.feature.write"
     DEV_CHECKS_RUN = "dev_checks.run"
@@ -122,7 +123,8 @@ AGENT_GRANTS: dict[AgentRole, frozenset[Action]] = {
     AgentRole.JUNIOR: frozenset({Action.CHILD_PATCH_WRITE, Action.RUN_RESULT_SUBMIT}),
 }
 
-SERVICE_GRANTS: frozenset[Action] = frozenset({Action.RUN_RESULT_SUBMIT})
+# Workers relay agent output; the API re-authorizes it as the agent role that produced it.
+SERVICE_GRANTS: frozenset[Action] = frozenset({Action.RUN_RESULT_SUBMIT, Action.RUN_CLAIM})
 
 # Actions no machine identity may ever perform, regardless of configuration.
 MACHINE_FORBIDDEN = frozenset(

@@ -96,6 +96,7 @@ class GuardFacts:
     repair_limit: int = DEFAULT_REPAIR_LIMIT
     ci_required_pass: bool = False
     merge_confirmed_by_github: bool = False
+    merge_executor_available: bool = False
     pending_external_effects: bool = False
 
 
@@ -179,6 +180,8 @@ def _g_approve_merge(f: GuardFacts, unmet: list[str]) -> None:
     _need(f.qa_mandatory_all_pass, "QA has not passed", unmet)
     _need(f.qa_evidence_current, "QA evidence is stale for the current head/base", unmet)
     _need(f.ci_required_pass, "required CI checks have not passed", unmet)
+    _need(f.merge_executor_available,
+          "Git broker is not connected yet; merge the QA-passed branch manually for now", unmet)
 
 
 def _g_merge_confirmed(f: GuardFacts, unmet: list[str]) -> None:

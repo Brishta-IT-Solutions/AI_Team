@@ -293,3 +293,31 @@ def activate(
          aggregate_version=project.version, type="project.activated",
          payload=project_snapshot(project))
     return project, items
+
+
+def set_execution_policy(ctx: Ctx, project_id: uuid.UUID, *, commands: list[dict[str, Any]],
+                         protected_paths: list[str], expected_version: int) -> Project:
+    """Engineering Lead approves the exact argv commands workers may run (FR-04)."""
+    project = ctx.session.scalar(select(Project).where(Project.id == project_id).with_for_update())
+    if project is None:
+        raise NotFound("project not found")
+    ctx.require(Action.COMMAND_POLICY_APPROVE, project.id, object_type="policy", object_id=project.id)
+    if project.version != expected_version:
+        raise Conflict(f"project is at version {project.version}", code="stale_version")
+    ids = [c["id"] for c in commands]
+    if len(ids) != len(set(ids)):
+        raise Unprocessable("command ids must be unique", field_errors={"commands": "duplicate id"})
+    before = {"policy": project.policy, "policy_version": project.policy_version}
+    project.policy = {**project.policy, "commands": commands, "protected_paths": protected_paths}
+    project.policy_version += 1
+    project.version += 1
+    audit(ctx.session, ctx.principal, action="policy.execution.set", object_type="policy",
+          object_id=project.id, project_id=project.id, correlation_id=ctx.correlation_id,
+          before=before, after={"policy": project.policy, "policy_version": project.policy_version},
+          policy_version=project.policy_version,
+          details={"commands": [{"id": c["id"], "argv": c["argv"]} for c in commands],
+                   "protected_paths": protected_paths})
+    emit(ctx.session, project_id=project.id, aggregate_type="project", aggregate_id=project.id,
+         aggregate_version=project.version, type="project.policy_changed",
+         payload={"policy_version": project.policy_version})
+    return project

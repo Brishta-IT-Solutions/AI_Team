@@ -50,7 +50,7 @@ def test_ticket_keys_and_validation(api, project, task):
     assert dep.status_code == 422
 
 
-def test_happy_path_to_ready_for_dev(api, task):
+def test_happy_path_approval_hands_work_to_developer(api, task):
     tid = task["id"]
     assert command(api, tid, "analyze").json()["task"]["stage"] == "BA_ANALYSIS"
     r = submit(api, tid, ba_spec())
@@ -58,7 +58,8 @@ def test_happy_path_to_ready_for_dev(api, task):
     r = approve_requirements(api, tid)
     assert r.status_code == 200, r.json()
     v = view(api, tid)
-    assert v["task"]["stage"] == "READY_FOR_DEV"
+    # Approval reserves budget, takes the branch lease and queues Claude Code.
+    assert v["task"]["stage"] == "DEVELOPING" and v["task"]["execution_status"] == "QUEUED"
     assert v["requirements"]["approved_spec_id"] == v["task"]["current_spec_id"]
     assert [a["decision"] for a in v["approvals"]] == ["APPROVED"]
 
