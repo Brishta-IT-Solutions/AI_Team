@@ -57,6 +57,7 @@ class Action(StrEnum):
     TASK_CANCEL = "task.cancel"
     TASK_RESUME = "task.resume"
     TASK_RETRY = "task.retry"
+    TASK_DELETE = "task.delete"
     REQUIREMENTS_REQUEST_CHANGES = "requirements.request_changes"
     REQUIREMENTS_DRAFT_WRITE = "requirements.draft.write"
     CODE_REQUEST_CHANGES = "code.request_changes"
@@ -88,12 +89,12 @@ HUMAN_GRANTS: dict[HumanRole, frozenset[Action]] = {
     HumanRole.ADMINISTRATOR: frozenset(_READ | {
         Action.PROJECT_MEMBERS_MANAGE, Action.PROJECT_ACTIVATE, Action.POLICY_CHANGE,
         Action.BUDGET_CONFIGURE, Action.AGENT_CONFIGURE, Action.SECRET_REFERENCE_MANAGE,
-        Action.TASK_CANCEL, Action.TASK_RESUME, Action.TASK_RETRY,
+        Action.TASK_CANCEL, Action.TASK_RESUME, Action.TASK_RETRY, Action.TASK_DELETE,
     }),
     HumanRole.PRODUCT_LEAD: frozenset(_READ | {
         Action.TASK_CREATE, Action.TASK_EDIT, Action.TASK_ANALYZE, Action.TASK_CANCEL,
         Action.TASK_RESUME, Action.TASK_RETRY, Action.REQUIREMENTS_REQUEST_CHANGES,
-        Action.REQUIREMENTS_DRAFT_WRITE, Action.APPROVE_REQUIREMENTS,
+        Action.REQUIREMENTS_DRAFT_WRITE, Action.APPROVE_REQUIREMENTS, Action.TASK_DELETE,
     }),
     HumanRole.ENGINEERING_LEAD: frozenset(_READ | {
         Action.REPOSITORY_CONFIGURE, Action.COMMAND_POLICY_APPROVE, Action.AGENT_CONFIGURE,
@@ -131,6 +132,7 @@ MACHINE_FORBIDDEN = frozenset(
     GATE_ACTIONS | {
         Action.GIT_PUSH_PROTECTED, Action.MERGE_EXECUTE, Action.PRODUCTION_EXECUTE,
         Action.POLICY_CHANGE, Action.PROJECT_MEMBERS_MANAGE, Action.SECRET_REFERENCE_MANAGE,
+        Action.TASK_DELETE,
     }
 )
 

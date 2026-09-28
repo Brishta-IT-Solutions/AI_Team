@@ -284,3 +284,44 @@ def test_permitted_actions_separate_role_from_state(api, task):
     assert product["analyze"]["allowed"] and product["analyze"]["authorized"]
     assert product["approve_requirements"]["authorized"] and not product["approve_requirements"]["allowed"]
     assert not product["approve_merge"]["authorized"]
+
+
+def test_delete_hides_ticket_but_keeps_history(api, project, task, db):
+    tid, pid = task["id"], project["id"]
+    command(api, tid, "analyze")
+    submit(api, tid, ba_spec())
+    blocked = {a["command"]: a for a in view(api, tid)["permitted_actions"]}["delete"]
+    assert blocked["authorized"] and not blocked["allowed"]
+    assert "cancel PORTAL-1 first" in blocked["reasons"][0]
+    r = command(api, tid, "delete")
+    assert r.status_code == 409 and r.json()["details"]["unmet"] == blocked["reasons"]
+
+    command(api, tid, "cancel", reason="Old demo ticket")
+    assert command(api, tid, "delete", reason="Cleaning up").status_code == 202
+    assert api.get("product", f"/tasks/{tid}").status_code == 404
+    board = api.get("product", f"/projects/{pid}/board").json()
+    assert not any(c["items"] for c in board["columns"])
+    assert api.get("product", f"/projects/{pid}/tasks").json()["items"] == []
+    # The history stays: spec versions and the audit trail are append-only.
+    assert db.scalar(select(RequirementVersion.version).where(RequirementVersion.task_id == tid)) == 1
+    deleted = db.scalar(select(AuditEvent).where(AuditEvent.action == "task.delete"))
+    assert deleted.reason == "Cleaning up" and deleted.actor_id
+
+
+def test_delete_new_ticket_and_dependents_block(api, project, task):
+    pid, tid = project["id"], task["id"]
+    dep = api.post("product", f"/projects/{pid}/tasks",
+                   {"title": "Follow-up", "priority": "P2", "dependencies": [tid]}).json()
+    r = command(api, tid, "delete")
+    assert r.status_code == 409 and r.json()["details"]["unmet"] == ["PORTAL-2 still depend on PORTAL-1"]
+    assert command(api, dep["id"], "delete").status_code == 202  # a NEW ticket, nothing depends on it
+    assert command(api, tid, "delete").status_code == 202
+    # A deleted ticket can't be picked as a new dependency.
+    r = api.post("product", f"/projects/{pid}/tasks", {"title": "x", "priority": "P2", "dependencies": [tid]})
+    assert r.status_code == 422
+
+
+def test_only_leads_and_admins_delete(api, task):
+    assert command(api, task["id"], "delete", who="observer").status_code == 403
+    assert command(api, task["id"], "delete", who="eng").status_code == 403
+    assert command(api, task["id"], "delete", who="admin").status_code == 202

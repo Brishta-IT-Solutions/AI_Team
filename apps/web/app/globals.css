@@ -76,6 +76,8 @@ h3 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacin
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .btn-danger { color: var(--danger-fg); }
+.link-btn { background: none; border: none; padding: 0; font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.link-btn:hover { color: var(--danger-fg); text-decoration-color: currentColor; }
 input, select, textarea {
   font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line);
   border-radius: 8px; padding: 7px 10px;

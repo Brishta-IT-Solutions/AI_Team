@@ -23,7 +23,7 @@ Status of each functional requirement and acceptance test against this codebase.
 | FR-06 | Activation and retirement | Partial | Activation gate with exact missing items. **Gap:** disable, archive, credential revocation. |
 | FR-07 | Dashboard | Partial | Project list. **Gap:** stage counts, approvals, blockers, spend, health. |
 | FR-08 | Kanban | Done (foundation) | Seven columns, badges not columns, drag and keyboard parity, denied moves explained. |
-| FR-09 | Ticket | Done (pilot) | All eight tabs: Overview, Requirements, UX, Code, QA, Runs, Costs, Audit. |
+| FR-09 | Ticket | Done (pilot) | All eight tabs: Overview, Requirements, UX, Code, QA, Runs, Costs, Audit. New, Done and Cancelled tickets can be deleted: hidden from the board, history kept. |
 | FR-10 | Requirements | Partial | Versions, stable AC IDs, blocking questions, approval with scope. **Gap:** version compare, structured draft editor (JSON import today). |
 | FR-11 | Code and QA screen | Partial | Branch, head/base, files, self-check output; criteria matrix, suites, defects, evidence freshness. **Gap:** diff view and PR links (need the Git broker). |
 | FR-12 | Runs and agents screen | Partial | Team panel and Runs tab: attempt, milestone, duration, logs, model, cost label, junior sub-runs. **Gap:** per-run cancel and resume buttons (ticket-level cancel/retry exist). |

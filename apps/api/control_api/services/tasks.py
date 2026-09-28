@@ -59,6 +59,7 @@ def snapshot(t: Task) -> dict[str, Any]:
         "approved_spec_id": str(t.approved_spec_id or ""), "head_sha": t.head_sha,
         "base_sha": t.base_sha, "branch": t.branch, "repair_count": t.repair_count, "repair_limit": t.repair_limit,
         "priority": t.priority, "title": t.title,
+        "deleted_at": t.deleted_at.isoformat() if t.deleted_at else None,
     }
 
 
@@ -76,6 +77,8 @@ def load_task(
         raise NotFound("task not found")
     # Membership is checked before anything about the task is revealed (AT-15).
     ctx.require(action, task.project_id, object_type="task", object_id=task.id)
+    if task.deleted_at is not None:
+        raise NotFound("task not found")
     project = ctx.session.get(Project, task.project_id)
     assert project is not None
     return task, project
@@ -106,7 +109,7 @@ def create_task(
     deps = sorted(set(dependencies))
     if deps:
         found = set(ctx.session.scalars(select(Task.id).where(
-            Task.id.in_(deps), Task.project_id == project.id)).all())
+            Task.id.in_(deps), Task.project_id == project.id, Task.deleted_at.is_(None))).all())
         if missing := [str(d) for d in deps if d not in found]:
             # Concealed: a foreign project's ticket is indistinguishable from a missing one.
             raise Unprocessable("dependencies must be existing tickets in the same project",
@@ -241,7 +244,39 @@ def _revoke(ctx: Ctx, task: Task, project: Project, gates: set[Gate], why: str) 
 # ---------------------------------------------------------------- commands
 
 
-COMMANDS = ("analyze", "request_changes", "cancel", "resume", "retry")
+COMMANDS = ("analyze", "request_changes", "cancel", "resume", "retry", "delete")
+DELETABLE_STAGES = (Stage.NEW, Stage.DONE, Stage.CANCELLED)
+
+
+def delete_blockers(ctx: Ctx, task: Task) -> list[str]:
+    """Why this ticket can't be deleted yet; empty when it can."""
+    reasons = []
+    if Stage(task.stage) not in DELETABLE_STAGES:
+        reasons.append(f"only New, Done or Cancelled tickets can be deleted; cancel {task.key} first")
+    dependents = ctx.session.scalars(select(Task.key).join(
+        TaskDependency, TaskDependency.task_id == Task.id).where(
+        TaskDependency.depends_on_id == task.id, Task.deleted_at.is_(None),
+        Task.stage.not_in([Stage.DONE.value, Stage.CANCELLED.value])).order_by(Task.key)).all()
+    if dependents:
+        reasons.append(f"{', '.join(dependents)} still depend on {task.key}")
+    return reasons
+
+
+def delete_task(ctx: Ctx, task: Task, project: Project, reason: str | None) -> Task:
+    """Soft delete: the ticket leaves the board; specs, approvals and audit are kept."""
+    if blockers := delete_blockers(ctx, task):
+        raise Conflict(f"{task.key} can't be deleted: {'; '.join(blockers)}",
+                       code="illegal_transition", details={"unmet": blockers})
+    before = snapshot(task)
+    task.deleted_at = task.updated_at = utcnow()
+    task.deleted_by = uuid.UUID(ctx.principal.id)
+    task.version += 1
+    audit(ctx.session, ctx.principal, action="task.delete", object_type="task", object_id=task.id,
+          project_id=project.id, correlation_id=ctx.correlation_id, reason=reason, before=before,
+          after=snapshot(task), policy_version=project.policy_version)
+    emit(ctx.session, project_id=project.id, aggregate_type="task", aggregate_id=task.id,
+         aggregate_version=task.version, type="task.deleted", payload=snapshot(task))
+    return task
 
 
 def run_command(
@@ -266,6 +301,11 @@ def run_command(
         return decide_gate(ctx, task_id, gate=gate, decision=ApprovalDecision.CHANGES_REQUESTED,
                            scope_hash=None, expected_version=expected_version, reason=reason,
                            _loaded=(task, project))
+
+    if command == "delete":
+        ctx.require(Action.TASK_DELETE, project.id, object_type="task", object_id=task.id)
+        _check_version(task, expected_version)
+        return delete_task(ctx, task, project, reason)
 
     if command == "cancel":
         ctx.require(Action.TASK_CANCEL, project.id, object_type="task", object_id=task.id)
@@ -519,6 +559,7 @@ def permitted_actions(ctx: Ctx, task: Task, project: Project) -> list[dict[str, 
     add("retry", Action.TASK_RETRY, None,
         [] if status in (ExecutionStatus.FAILED, ExecutionStatus.BLOCKED) and
         stage not in TERMINAL_STAGES else [f"execution status is {status}, not FAILED/BLOCKED"])
+    add("delete", Action.TASK_DELETE, None, delete_blockers(ctx, task))
     return out
 
 

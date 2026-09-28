@@ -85,3 +85,10 @@ def test_humans_never_hold_machine_only_actions():
     everyone = human(*HumanRole)
     for action in (Action.GIT_PUSH_PROTECTED, Action.MERGE_EXECUTE, Action.PRODUCTION_EXECUTE):
         assert not authorize(everyone, action, P).allowed
+
+
+def test_only_humans_delete_tickets():
+    assert authorize(human(HumanRole.PRODUCT_LEAD), Action.TASK_DELETE, P).allowed
+    assert authorize(human(HumanRole.ADMINISTRATOR), Action.TASK_DELETE, P).allowed
+    assert not authorize(human(HumanRole.ENGINEERING_LEAD), Action.TASK_DELETE, P).allowed
+    assert Action.TASK_DELETE in MACHINE_FORBIDDEN

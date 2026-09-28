@@ -10,6 +10,8 @@ import { Elapsed, PriorityBadge, StatusBadge } from "@/components/badges";
 import { ErrorState, Loading } from "@/components/states";
 import { TeamPanel } from "@/components/team";
 
+const DELETABLE = new Set(["NEW", "DONE", "CANCELLED"]);
+
 /**
  * Moving a card is a request to run a command, never a direct stage write (FR-08, AT-17).
  * Only Backlog → Analysis maps to a command; every other drop is explained, not applied.
@@ -42,6 +44,21 @@ export default function ProjectBoard({ params }: { params: Promise<{ projectId: 
   const [notice, setNotice] = useState<{ title: string; reasons: string[] } | null>(null);
   const [dragging, setDragging] = useState<TaskCard | null>(null);
   const [over, setOver] = useState<string | null>(null);
+
+  // The API decides; this only hides the button from roles that can never delete.
+  const me = useResource<{ projects: Record<string, string[]> }>("/me");
+  const canDelete = (me.data?.projects[projectId] ?? []).some((r) => r === "PRODUCT_LEAD" || r === "ADMINISTRATOR");
+
+  async function remove(card: TaskCard) {
+    if (!window.confirm(`Delete ${card.key} “${card.title}”? It leaves the board; its history is kept.`)) return;
+    try {
+      await api.post(`/tasks/${card.id}/commands`, { command: "delete", expected_version: card.version });
+      setNotice(null);
+      await board.refresh();
+    } catch (e) {
+      if (e instanceof ApiError) setNotice({ title: e.body.message, reasons: e.reasons });
+    }
+  }
 
   async function move(card: TaskCard, target: string) {
     const { command, why } = commandForMove(card, target);
@@ -117,7 +134,13 @@ export default function ProjectBoard({ params }: { params: Promise<{ projectId: 
                   </Link>
                   <div className="ticket-meta spread">
                     <span>{STAGE_LABEL[card.stage]}</span>
-                    <Elapsed since={card.updated_at} />
+                    <span className="row">
+                      <Elapsed since={card.updated_at} />
+                      {canDelete && DELETABLE.has(card.stage) && (
+                        <button className="link-btn" onClick={() => void remove(card)}
+                          aria-label={`Delete ${card.key}`}>Delete</button>
+                      )}
+                    </span>
                   </div>
                   <label className="sr-only" htmlFor={`move-${card.id}`}>Move {card.key}</label>
                   <select id={`move-${card.id}`} className="small" style={{ marginTop: 8, width: "100%" }}

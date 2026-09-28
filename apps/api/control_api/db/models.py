@@ -177,6 +177,9 @@ class Task(Base):
     repair_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     repair_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
     owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    # Soft delete: hidden from the board, but specs, approvals and audit stay (append-only).
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = _ts()
     updated_at: Mapped[datetime] = _ts()
 

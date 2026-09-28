@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { use, useCallback, useRef, useState } from "react";
 import { ApiError, api } from "@/lib/api";
 import { useEventCursor, useResource } from "@/lib/useResource";
@@ -229,7 +230,9 @@ function Audit({ projectId, taskId }: { projectId: string; taskId: string }) {
 const LABELS: Record<string, string> = {
   analyze: "Start analysis", approve_requirements: "Approve requirements", request_changes: "Request changes",
   approve_merge: "Approve merge", cancel: "Cancel ticket", resume: "Resume", retry: "Retry",
+  delete: "Delete ticket",
 };
+const DESTRUCTIVE = new Set(["cancel", "delete"]);
 const NEEDS_REASON = new Set(["request_changes", "cancel", "resume", "retry"]);
 
 function Actions({ view, onDone }: { view: TaskView; onDone: () => Promise<void> }) {
@@ -245,7 +248,7 @@ function Actions({ view, onDone }: { view: TaskView; onDone: () => Promise<void>
         : relevant.length === 0 && <p className="muted small">No actions are available in this stage.</p>}
       {relevant.map((a) => (
         <div key={a.command} className="action">
-          <button className={`btn ${a.command.startsWith("approve") ? "btn-primary" : a.command === "cancel" ? "btn-danger" : ""}`}
+          <button className={`btn ${a.command.startsWith("approve") ? "btn-primary" : DESTRUCTIVE.has(a.command) ? "btn-danger" : ""}`}
             disabled={!a.allowed} aria-describedby={a.allowed ? undefined : `why-${a.command}`}
             onClick={() => { setActive(a); dialog.current?.showModal(); }}>
             {LABELS[a.command] ?? a.command}
@@ -267,7 +270,9 @@ function ActionForm({ view, action, onClose, onDone }: {
   const [repairs, setRepairs] = useState(1);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+  const router = useRouter();
   const t = view.task;
+  const deleting = action.command === "delete";
   const approvingReqs = action.command === "approve_requirements";
   const needsRepairs = action.command === "resume" && t.stage === "FIX_REQUIRED" && t.execution_status === "PAUSED";
 
@@ -287,6 +292,8 @@ function ActionForm({ view, action, onClose, onDone }: {
         });
       }
       onClose();
+      // A deleted ticket no longer exists for anyone; go back to the board.
+      if (deleting) return router.push(`/projects/${t.project_id}`);
       await onDone();
     } catch (err) {
       setError(err instanceof ApiError ? err : null);
@@ -306,6 +313,7 @@ function ActionForm({ view, action, onClose, onDone }: {
         </dl>
       )}
       {approvingReqs && <p className="small muted" style={{ margin: 0 }}>Any later edit creates a new version and revokes this approval.</p>}
+      {deleting && <p className="small" style={{ margin: 0 }}>{t.key} disappears from the board for everyone. Its specification, decisions and audit history are kept.</p>}
       {needsRepairs && (
         <label className="field">Additional repair cycles
           <select value={repairs} onChange={(e) => setRepairs(Number(e.target.value))}>{[1, 2, 3].map((n) => <option key={n}>{n}</option>)}</select>
@@ -321,7 +329,7 @@ function ActionForm({ view, action, onClose, onDone }: {
         </div>
       )}
       <div className="row">
-        <button className={`btn ${action.command === "cancel" ? "btn-danger" : "btn-primary"}`} disabled={busy}>Confirm</button>
+        <button className={`btn ${DESTRUCTIVE.has(action.command) ? "btn-danger" : "btn-primary"}`} disabled={busy}>{deleting ? "Delete" : "Confirm"}</button>
         <button type="button" className="btn" onClick={onClose}>Close</button>
       </div>
     </form>

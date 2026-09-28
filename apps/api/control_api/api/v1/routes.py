@@ -191,7 +191,7 @@ def list_tasks(project_id: uuid.UUID, request: Request, cursor: str | None = Non
     ctx = make_ctx(request, session, principal)
     ctx.require(Action.TASK_READ, project_id, object_type="project", object_id=project_id)
     n = _page_limit(limit)
-    stmt = select(Task).where(Task.project_id == project_id)
+    stmt = select(Task).where(Task.project_id == project_id, Task.deleted_at.is_(None))
     if stage:
         stmt = stmt.where(Task.stage == stage)
     if c := decode_cursor(cursor):
@@ -209,7 +209,7 @@ def board(project_id: uuid.UUID, request: Request, session: Session = Depends(ge
           principal: Principal = Depends(current_principal)) -> dict[str, Any]:
     ctx = make_ctx(request, session, principal)
     ctx.require(Action.TASK_READ, project_id, object_type="project", object_id=project_id)
-    rows = session.scalars(select(Task).where(Task.project_id == project_id)
+    rows = session.scalars(select(Task).where(Task.project_id == project_id, Task.deleted_at.is_(None))
                            .order_by(Task.priority, Task.created_at).limit(500)).all()
     columns: dict[str, list[dict[str, Any]]] = {c: [] for c in KANBAN_COLUMNS}
     for t in rows:

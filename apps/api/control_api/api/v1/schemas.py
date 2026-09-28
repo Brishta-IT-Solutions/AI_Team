@@ -66,7 +66,7 @@ class TaskCreate(In):
 
 
 class CommandBody(In):
-    command: Literal["analyze", "request_changes", "cancel", "resume", "retry"]
+    command: Literal["analyze", "request_changes", "cancel", "resume", "retry", "delete"]
     expected_version: int
     reason: str | None = Field(default=None, max_length=4000)
     additional_repairs: int | None = Field(default=None, ge=1, le=3)
