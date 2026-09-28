@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+"""Stand-in for `claude -p ... --output-format json` used by the end-to-end test."""
+import glob, json, os, subprocess, sys
+
+args = sys.argv[1:]
+prompt = args[args.index("-p") + 1]
+assert "--strict-mcp-config" in args and "--setting-sources" in args  # hardened invocation
+if "--resume" in args:  # reviewing the junior's patches
+    for patch in sorted(glob.glob(".aitc/patches/*.patch")):
+        subprocess.run(["git", "apply", patch], check=True)
+    print(json.dumps({"result": "junior-1.patch: applied", "session_id": "s1", "total_cost_usd": 0.30,
+                      "usage": {"input_tokens": 200, "output_tokens": 50}, "is_error": False}))
+    sys.exit(0)
+spec = json.load(open(".aitc/spec.json"))
+repair = "REPAIR CYCLE" in prompt
+message = "Identity expired: please renew" if repair else "Identity expired"
+with open("src/signin.js", "w") as f:
+    f.write(f'import {{ isIdentityValid }} from "./identity.js";\n'
+            f'export function signIn(identity) {{\n'
+            f'  return isIdentityValid(identity) ? {{ ok: true }} : {{ ok: false, message: "{message}" }};\n}}\n')
+with open("test/signin.test.js", "w") as f:
+    f.write('import { test } from "node:test";\nimport assert from "node:assert/strict";\n'
+            'import { signIn } from "../src/signin.js";\n'
+            'test("valid identity signs in", () => assert.equal(signIn({ expiresOn: "2999-01-01" }).ok, true));\n')
+if not repair:
+    json.dump([{"task_type": "MOCK_DATA", "complexity": 1, "allowed_paths": ["test/fixtures/"],
+                "expected_output": "sample identities", "checks": []},
+               {"task_type": "TYPES", "complexity": 1, "allowed_paths": ["src/auth/"],
+                "expected_output": "session types", "checks": []}], open(".aitc/delegations.json", "w"))
+print(json.dumps({"result": f"Implemented {spec['goal'][:40]}", "session_id": "s1", "total_cost_usd": 0.12,
+                  "usage": {"input_tokens": 100, "output_tokens": 40}, "is_error": False}))

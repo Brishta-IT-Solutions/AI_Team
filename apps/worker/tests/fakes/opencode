@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""Stand-in for `opencode run --format json`: edits files like the real agent, in and out of scope."""
+import json, os, sys
+
+args = sys.argv[1:]
+if args == ["--version"]:
+    print("1.18.33")
+    sys.exit(0)
+assert args[0] == "run" and "--pure" in args and args[args.index("--format") + 1] == "json"
+config = json.loads(os.environ["OPENCODE_CONFIG_CONTENT"])
+assert config["permission"]["bash"] == "deny" and config["agent"]["build"]["permission"]["webfetch"] == "deny"
+assert config["provider"]["ollama"]["options"]["baseURL"].endswith("/v1")
+work = args[args.index("--dir") + 1]
+assert not os.path.exists(os.path.join(work, "opencode.json")), "repository config must be removed first"
+for path, content in (("test/fixtures/identities.json", '[{"expiresOn": "1999-01-01"}]\n'),
+                      ("src/auth/escape.js", "// out of scope\n")):
+    full = os.path.join(work, path)
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    open(full, "w").write(content)
+open(os.path.join(work, "README.md"), "a").write("tampered\n")  # an out-of-scope edit to a tracked file
+for tokens in ({"input": 50, "output": 20}, {"input": 70, "output": 5}):
+    print(json.dumps({"type": "step_finish", "part": {"type": "step-finish", "tokens": {**tokens, "total": 0}}}))
