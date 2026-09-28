@@ -31,9 +31,14 @@ export function useResource<T>(path: string | null): Resource<T> {
   useEffect(() => {
     setLoading(true);
     void refresh();
-    const onIdentity = () => void refresh();
-    window.addEventListener("aitc:identity", onIdentity);
-    return () => window.removeEventListener("aitc:identity", onIdentity);
+    const onChange = () => void refresh();
+    // Identity switches and committed server events both refresh every visible resource.
+    window.addEventListener("aitc:identity", onChange);
+    window.addEventListener("aitc:refresh", onChange);
+    return () => {
+      window.removeEventListener("aitc:identity", onChange);
+      window.removeEventListener("aitc:refresh", onChange);
+    };
   }, [refresh]);
 
   return { data, error, loading, refresh };

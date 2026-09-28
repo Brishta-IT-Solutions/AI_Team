@@ -8,6 +8,7 @@ import type { Board, Project, TaskCard } from "@/lib/types";
 import { STAGE_LABEL } from "@/lib/types";
 import { Elapsed, PriorityBadge, StatusBadge } from "@/components/badges";
 import { ErrorState, Loading } from "@/components/states";
+import { TeamPanel } from "@/components/team";
 
 /**
  * Moving a card is a request to run a command, never a direct stage write (FR-08, AT-17).
@@ -33,7 +34,10 @@ export default function ProjectBoard({ params }: { params: Promise<{ projectId: 
   const project = useResource<Project>(`/projects/${projectId}`);
   const board = useResource<Board>(`/projects/${projectId}/board`);
   const refreshBoard = board.refresh;
-  const onEvents = useCallback(() => void refreshBoard(), [refreshBoard]);
+  const onEvents = useCallback(() => {
+    void refreshBoard();
+    window.dispatchEvent(new Event("aitc:refresh"));
+  }, [refreshBoard]);
   const sync = useEventCursor(projectId, onEvents);
   const [notice, setNotice] = useState<{ title: string; reasons: string[] } | null>(null);
   const [dragging, setDragging] = useState<TaskCard | null>(null);
@@ -69,6 +73,8 @@ export default function ProjectBoard({ params }: { params: Promise<{ projectId: 
           <NewTicket projectId={projectId} onCreated={board.refresh} />
         </div>
       </div>
+
+      <TeamPanel projectId={projectId} />
 
       {notice && (
         <div className="notice" role="alert" style={{ marginBottom: 16 }}>

@@ -36,6 +36,7 @@ export type TaskView = {
   task: TaskCard & {
     project_id: string; project_key: string; description: string; current_spec_id: string;
     approved_spec_id: string; head_sha: string | null; base_sha: string | null; repair_limit: number;
+    branch: string | null;
     owner_id: string;
   };
   dependencies: { id: string; key: string; stage: Stage }[];
@@ -64,4 +65,44 @@ export const STAGE_LABEL: Record<Stage, string> = {
   READY_FOR_DEV: "Ready for development", DEVELOPING: "Developing", DEV_REVIEW: "Developer self-check",
   QA: "Independent QA", FIX_REQUIRED: "Fix required", MERGE_APPROVAL: "Awaiting merge approval",
   MERGING: "Merging", DONE: "Done", CANCELLED: "Cancelled",
+};
+
+export type Role = "BA" | "DEVELOPER" | "QA" | "JUNIOR";
+
+export type TeamMember = {
+  role: Role; member: string; title: string; also?: string;
+  state: "working" | "online" | "offline" | "not_configured";
+  configured_model: string | null; live_model: string | null; detail: string | null;
+  running: number; queued: number;
+};
+
+export type RunStatus = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "BLOCKED" | "CANCELLED";
+
+export type RunItem = {
+  id: string; role: Role; member: string; status: RunStatus; attempt: number; parent_run_id: string | null;
+  milestone: string | null; provider: string | null; model: string | null; worker_id: string | null;
+  usage: Record<string, unknown> | null; cost: string | null; cost_quality: string;
+  error: { code?: string; message?: string } | null;
+  result: {
+    review?: "PASSED" | "FAILED"; findings?: string[]; gate?: string; reasons?: string[]; accepted?: boolean;
+    files_touched?: string[];
+    submission?: { head_sha: string; base_sha: string; files_changed: string[]; summary: string;
+      tests: { command_id: string; exit_code: number }[] };
+    checks?: { command_id: string; exit_code: number; tail: string }[];
+    junior?: { accepted: boolean; reasons?: string[]; task_type?: string; expected_output?: string }[];
+  } | null;
+  created_at: string; started_at: string | null; ended_at: string | null;
+  logs?: { sequence: number; type: string; message: string; at: string }[];
+};
+
+export type CriterionResult = "PASS" | "FAIL" | "BLOCKED" | "NOT_RUN";
+
+export type QAData = {
+  current_report_id: string | null;
+  reports: { id: string; verdict: string; head_sha: string; base_sha: string; current: boolean; created_at: string;
+    payload: { criteria_results: { ac_id: string; result: CriterionResult; evidence_refs: string[] }[];
+      suites: { name: string; mandatory: boolean; result: CriterionResult }[];
+      findings: { ac_id: string | null; severity: string; title: string }[] } }[];
+  defects: { id: string; ac_id: string | null; severity: string; status: string; title: string;
+    evidence: { reproduction_steps?: string[]; expected?: string; actual?: string }; updated_at: string }[];
 };
