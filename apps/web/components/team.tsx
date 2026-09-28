@@ -19,8 +19,9 @@ export function TeamPanel({ projectId, projectKey }: { projectId: string; projec
     <>
       {unserved && (
         <div className="notice small" role="status" style={{ marginBottom: 12 }}>
-          <strong>No worker is serving {projectKey} yet.</strong> In <span className="mono">.env</span>, add it to the
-          projects the worker serves, e.g. <span className="mono">AITC_PROJECTS=PORTAL,{projectKey}</span>, then
+          <strong>No worker is serving {projectKey}.</strong> Check that <span className="mono">{projectKey}</span> is
+          listed in <span className="mono">AITC_PROJECTS</span> in <span className="mono">.env</span> (for
+          example <span className="mono">AITC_PROJECTS=PORTAL,TASDEEQ</span>), then
           run <span className="mono">docker compose up -d worker</span>.
         </div>
       )}

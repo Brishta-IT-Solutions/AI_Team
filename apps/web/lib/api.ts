@@ -1,6 +1,7 @@
 "use client";
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// Same origin by default: the web app forwards /v1 to the Control API (see next.config.ts).
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 const SUBJECT_KEY = "aitc.subject";
 
 export type ApiErrorBody = {
@@ -39,12 +40,19 @@ export function setSubject(subject: string): void {
   window.dispatchEvent(new Event("aitc:identity"));
 }
 
+/** A fresh idempotency key. randomUUID() only exists on https or localhost; the LAN address is plain http. */
+function newKey(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 async function request<T>(method: string, path: string, body?: unknown, idempotencyKey?: string): Promise<T> {
   const headers: Record<string, string> = {
     authorization: `Bearer dev-human:${getSubject()}`,
     "content-type": "application/json",
   };
-  if (method !== "GET") headers["idempotency-key"] = idempotencyKey ?? crypto.randomUUID();
+  if (method !== "GET") headers["idempotency-key"] = idempotencyKey ?? newKey();
   let res: Response;
   try {
     res = await fetch(`${API_URL}/v1${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
@@ -58,6 +66,9 @@ async function request<T>(method: string, path: string, body?: unknown, idempote
     });
   }
   const json = await res.json().catch(() => ({}));
+  if (res.status === 401 && (json as ApiErrorBody).code === "access_code_required") {
+    window.location.assign(`/access?next=${encodeURIComponent(window.location.pathname)}`);
+  }
   if (!res.ok) throw new ApiError(res.status, json as ApiErrorBody);
   return json as T;
 }

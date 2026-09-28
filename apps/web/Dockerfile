@@ -4,9 +4,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
-# The browser calls the API directly, so this is the address as seen from the user's machine.
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# Where this app forwards /v1 to, as seen from inside Docker. Browsers only ever talk to this app.
+ARG AITC_API_INTERNAL_URL=http://api:8000
+ENV AITC_API_INTERNAL_URL=$AITC_API_INTERNAL_URL
 RUN npm run build
 
 FROM node:22-slim

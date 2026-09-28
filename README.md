@@ -46,6 +46,16 @@ docker compose up --build
 
 The first build takes a few minutes. When the log shows `Uvicorn running`, open **http://localhost:3000**. Demo users, a project and three tickets are loaded automatically on the first start. Stop with `Ctrl+C`; `docker compose down -v` also wipes the data.
 
+### Share it on your local network
+
+Anyone on the same network can use the Control Center from this computer.
+
+1. In `.env`, set a code people must enter first, e.g. `AITC_ACCESS_CODE=blue-falcon-42`, then run `docker compose up -d --build`.
+2. Find this computer's address: `ipconfig` on Windows (the *IPv4 Address*, e.g. `192.168.1.20`), or `ipconfig getifaddr en0` on a Mac.
+3. Others open **http://192.168.1.20:3000** and enter the code. If Windows asks whether Docker may accept connections on private networks, allow it.
+
+Only the web app is reachable from the network; it passes API calls through to the API, and the database and API themselves listen on this computer alone. The code keeps strangers out, but it is one shared code, not a login per person: once in, anyone can still pick who they act as. Share it only with people you trust until OIDC sign-in lands.
+
 ### Bring the team online
 
 1. `cp .env.example .env` and fill in what you have. Every field is optional; a member without credentials simply shows *not set up* on the board and tells you what it needs.

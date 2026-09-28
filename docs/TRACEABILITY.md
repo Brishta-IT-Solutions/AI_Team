@@ -41,7 +41,7 @@ Status of each functional requirement and acceptance test against this codebase.
 | FR-24 | Retry and recovery | Partial | 15 s heartbeats, 90 s run lease, reaping and fencing of lost workers, one repair attempt for invalid structured output, per-role timeouts, cancellation with grace period, client retries with backoff. **Gap:** restart reconciliation of provider side effects. |
 | FR-25 | Usage and budget | Partial | Atomic per-project reservations before dispatch, run/ticket/month caps, cumulative-cost deltas, API vs plan vs local vs unknown. **Gap:** 80 % warnings, pricing tables for token-only providers. |
 | FR-26 | Notifications | Not started | |
-| FR-27 | Security controls | Partial | Redaction before persistence, append-only triggers, denial audit, dev auth refused in production. **Gap:** OIDC, CSRF, secret manager, sandbox, audit export. |
+| FR-27 | Security controls | Partial | Redaction before persistence, append-only triggers, denial audit, dev auth refused in production. LAN sharing: only the web app is published; database and API bind to localhost; a shared access code (`apps/web/proxy.ts`) gates pages and the forwarded API. **Gap:** OIDC (per-person sign-in), CSRF, secret manager, sandbox, audit export. |
 
 ## Acceptance tests
 
