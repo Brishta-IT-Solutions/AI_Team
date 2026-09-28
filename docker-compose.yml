@@ -5,11 +5,13 @@
 services:
   postgres:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_USER: aitc
       POSTGRES_PASSWORD: aitc
       POSTGRES_DB: aitc
-    ports: ["127.0.0.1:5432:5432"]
+    # No host port: only the API talks to it, so a PostgreSQL already installed on this computer
+    # can't clash with it. For native development, `make infra` publishes it on localhost:5432.
     volumes: ["pgdata:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U aitc"]
@@ -18,6 +20,7 @@ services:
 
   api:
     build: ./apps/api
+    restart: unless-stopped  # e.g. if it starts before the network is fully up
     environment:
       AITC_ENV: development
       AITC_DATABASE_URL: postgresql+psycopg://aitc:aitc@postgres:5432/aitc
@@ -31,15 +34,18 @@ services:
 
   web:
     build: ./apps/web
+    restart: unless-stopped
     environment:
       AITC_ACCESS_CODE: ${AITC_ACCESS_CODE:-}  # shared code people on your network must enter
     ports: ["3000:3000"]  # the one port open to your network
     depends_on: [api]
 
   worker:
-    # Runs the AI team: Gemini (BA), Claude Code (developer), Codex (QA), Ollama (junior).
+    # Runs the AI team: Gemini (BA), Claude Code (developer), Codex (QA), OpenCode + Ollama (junior),
+    # and opens draft pull requests for GitHub Copilot to review.
     # Keys come from .env — see .env.example. Members without keys simply stay offline.
     build: ./apps/worker
+    restart: unless-stopped
     env_file:
       - path: .env
         required: false
@@ -53,6 +59,8 @@ services:
       # Codex sign-in with your ChatGPT plan lives here:
       #   docker compose run --rm worker codex login --device-auth
       - codex-home:/home/node/.codex
+      # OpenCode downloads its model adapter on first use; keep it between restarts.
+      - opencode-cache:/home/node/.cache/opencode
     depends_on: [api]
 
   redis:
@@ -65,3 +73,4 @@ volumes:
   pgdata:
   workspace:
   codex-home:
+  opencode-cache:

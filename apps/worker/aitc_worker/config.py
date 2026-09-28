@@ -36,6 +36,13 @@ class Config:
     codex_model: str = field(default_factory=lambda: _env("CODEX_MODEL"))
     ollama_url: str = field(default_factory=lambda: _env("OLLAMA_URL", "http://host.docker.internal:11434"))
     ollama_model: str = field(default_factory=lambda: _env("OLLAMA_MODEL"))
+    opencode_bin: str = field(default_factory=lambda: _env("OPENCODE_BIN", "opencode"))
+    # Who does junior work: "opencode" (an agent editing files with your Ollama model), "ollama"
+    # (the model answers with whole files), or "auto" (OpenCode when it's installed).
+    junior_engine: str = field(default_factory=lambda: _env("JUNIOR_ENGINE", "auto").lower())
+    # Ask GitHub Copilot to review each ticket's pull request (needs Copilot Pro or higher).
+    copilot_review: bool = field(default_factory=lambda: _env("GITHUB_COPILOT_REVIEW").lower() == "true")
+    github_api_url: str = field(default_factory=lambda: _env("GITHUB_API_URL", "https://api.github.com"))
 
     @property
     def repo_path(self) -> str:

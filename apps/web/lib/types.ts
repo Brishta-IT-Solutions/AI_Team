@@ -71,7 +71,7 @@ export const STAGE_LABEL: Record<Stage, string> = {
 export type Role = "BA" | "DEVELOPER" | "QA" | "JUNIOR";
 
 export type TeamMember = {
-  role: Role; member: string; title: string; also?: string;
+  role: Role | "OPENCODE" | "REVIEWER"; member: string; title: string; also?: string;
   state: "working" | "online" | "offline" | "not_configured";
   configured_model: string | null; live_model: string | null; detail: string | null;
   running: number; queued: number;
@@ -94,6 +94,15 @@ export type RunItem = {
   } | null;
   created_at: string; started_at: string | null; ended_at: string | null;
   logs?: { sequence: number; type: string; message: string; at: string }[];
+};
+
+export type PullRequestView = {
+  pull_request: { number: number; url: string; copilot_review_requested: boolean } | null;
+  copilot: {
+    available: boolean; error?: string;
+    reviews?: { state: string; body: string; submitted_at: string | null; url: string | null }[];
+    comments?: { path: string; line: number | null; body: string; url: string | null }[];
+  } | null;
 };
 
 export type CriterionResult = "PASS" | "FAIL" | "BLOCKED" | "NOT_RUN";

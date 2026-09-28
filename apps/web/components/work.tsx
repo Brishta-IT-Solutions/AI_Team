@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { useResource } from "@/lib/useResource";
-import type { CriterionResult, QAData, RunItem, TaskView } from "@/lib/types";
+import type { CriterionResult, PullRequestView, QAData, RunItem, TaskView } from "@/lib/types";
 import { Elapsed } from "@/components/badges";
 import { Empty, ErrorState, Loading } from "@/components/states";
 
@@ -129,14 +129,58 @@ export function CodeTab({ view }: { view: TaskView }) {
           <pre className="log">{c.tail}</pre>
         </details>
       ))}
+      <PullRequestCard taskId={t.id} />
       {dev.result?.junior && dev.result.junior.length > 0 && (
         <div className="card pad">
-          <h3 style={{ marginBottom: 8 }}>Delegated to the junior (Ollama)</h3>
+          <h3 style={{ marginBottom: 8 }}>Delegated to the junior (OpenCode or Ollama)</h3>
           <ul className="list small">{dev.result.junior.map((j, i) => (
             <li key={i}>{j.task_type?.toLowerCase().replace("_", " ") ?? "task"} — {j.accepted ? "patch sent to Claude for review" : `refused: ${j.reasons?.join("; ")}`}</li>
           ))}</ul>
         </div>
       )}
+    </div>
+  );
+}
+
+function PullRequestCard({ taskId }: { taskId: string }) {
+  const { data } = useResource<PullRequestView>(`/tasks/${taskId}/pull-request`);
+  const pr = data?.pull_request;
+  if (!pr) return null;
+  const copilot = data?.copilot;
+  const found = (copilot?.reviews?.length ?? 0) + (copilot?.comments?.length ?? 0);
+  return (
+    <div className="card pad stack">
+      <div className="spread">
+        <h3>Pull request</h3>
+        <a href={pr.url} target="_blank" rel="noreferrer" className="mono">#{pr.number} on GitHub (draft)</a>
+      </div>
+      <div>
+        <div className="spread">
+          <strong className="small">GitHub Copilot review</strong>
+          <span className="badge tone-neutral">advisory</span>
+        </div>
+        {!pr.copilot_review_requested ? (
+          <p className="small muted" style={{ margin: "4px 0 0" }}>
+            Not requested. It needs Copilot Pro or higher; then set <span className="mono">GITHUB_COPILOT_REVIEW=true</span>.
+          </p>
+        ) : copilot && !copilot.available ? (
+          <p className="small muted" style={{ margin: "4px 0 0" }}>{copilot.error}</p>
+        ) : found === 0 ? (
+          <p className="small muted" style={{ margin: "4px 0 0" }}>Requested. Copilot usually replies within a few minutes.</p>
+        ) : (
+          <ul className="list small" style={{ marginTop: 6 }}>
+            {copilot?.reviews?.filter((r) => r.body).map((r, i) => (
+              <li key={`r${i}`} style={{ whiteSpace: "pre-wrap" }}>{r.body}</li>
+            ))}
+            {copilot?.comments?.map((c, i) => (
+              <li key={`c${i}`}>
+                <span className="mono muted">{c.path}{c.line ? `:${c.line}` : ""}</span>
+                <div style={{ whiteSpace: "pre-wrap" }}>{c.body}</div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

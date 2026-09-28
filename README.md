@@ -14,6 +14,8 @@ Specs: [`docs/requirements/PRD-v1.0.docx`](docs/requirements/PRD-v1.0.docx) · [
 | **Claude Code** | Developer and UX: implements the approved spec on a feature branch, runs the checks, reviews the junior's work | Claude Code CLI, headless, isolated git worktree | Claude **Max**: run `claude setup-token` and paste the token |
 | **Codex** | Independent QA: verifies every acceptance criterion on the exact commit, files defects | Codex CLI, separate read-only-intent workspace | ChatGPT **Plus**: `docker compose run --rm worker codex login --device-auth` |
 | **Ollama** | Junior: mock data, types, docs, simple tests, renames. Never auth, payments or migrations | Local model on your computer | Nothing. Just have Ollama running with a coding model pulled |
+| **OpenCode** | Junior agent: does the junior's work by editing files itself with your Ollama model. File tools only: no shell, no web | OpenCode CLI in the worker | Nothing extra; it uses your Ollama model |
+| **GitHub Copilot** | Advisory reviewer of each ticket's draft pull request; its comments show on the ticket's Code tab | GitHub | Copilot **Pro** or higher (Copilot Free doesn't include code review), then `GITHUB_COPILOT_REVIEW=true` |
 | **You** | Approve requirements and merges. Nothing ships without you | Control Center web app | — |
 
 The loop: **Gemini** drafts → **you** approve → **Claude Code** builds (and may hand donkey work to **Ollama**, then reviews it) → automatic self-check → **Codex** tests independently → failures come back to Claude as defects, up to three repair cycles → **you** approve the merge.

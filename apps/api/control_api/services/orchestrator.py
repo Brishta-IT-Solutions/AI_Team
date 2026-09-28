@@ -55,6 +55,7 @@ from control_api.errors import Conflict, NotFound
 from control_api.services import leases
 from control_api.services.audit import audit
 from control_api.services.context import Ctx
+from control_api.services.github_reviews import pull_request_for
 from control_api.services.outbox import emit
 from control_api.services.redaction import redact, redact_text
 
@@ -70,6 +71,12 @@ TEAM = {
     "QA": {"member": "Codex", "title": "Independent QA"},
     "JUNIOR": {"member": "Ollama", "title": "Junior (donkey work)"},
 }
+# Members who work inside another role's run rather than having runs of their own.
+SUPPORTING = {
+    "OPENCODE": {"member": "OpenCode", "title": "Junior agent", "also": "edits files with your Ollama model"},
+    "REVIEWER": {"member": "GitHub Copilot", "title": "Pull request reviewer", "also": "advisory"},
+}
+PROVIDER_MEMBER = {"opencode": "OpenCode"}
 ACTIVE = ("QUEUED", "RUNNING")
 
 
@@ -606,7 +613,8 @@ def _apply_dev(ctx: Ctx, octx: Ctx, run: Run, project: Project, payload: dict[st
     task.head_sha, task.base_sha = submission.head_sha, submission.base_sha
     # JSONB columns are replaced, never mutated in place, so every change is persisted.
     base_result = {"submission": submission.model_dump(mode="json"), "junior": redact(payload.get("junior", [])),
-                   "checks": redact(payload.get("checks", []))[:10]}
+                   "checks": redact(payload.get("checks", []))[:10],
+                   "pull_request": pull_request_for(repo.clone_url, payload.get("pull_request"))}
     run.result = base_result
     apply_transition(octx, task, project, Trigger.SUBMIT_DEVELOPMENT, gather_facts(octx, task, project),
                      details={"head_sha": submission.head_sha, "run_id": str(run.id)})
@@ -738,7 +746,8 @@ def _iso(value: datetime | None) -> str | None:
 
 def run_view(ctx: Ctx, run: Run, *, with_logs: bool) -> dict[str, Any]:
     out = {
-        "id": str(run.id), "role": run.role, "member": TEAM[run.role]["member"], "status": run.status,
+        "id": str(run.id), "role": run.role, "status": run.status,
+        "member": PROVIDER_MEMBER.get(run.provider or "", TEAM[run.role]["member"]),
         "attempt": run.attempt, "parent_run_id": str(run.parent_run_id) if run.parent_run_id else None,
         "milestone": run.milestone, "provider": run.provider, "model": run.model, "worker_id": run.worker_id,
         "usage": run.usage, "cost": str(run.cost) if run.cost is not None else None,
@@ -761,10 +770,10 @@ def team_view(ctx: Ctx, project: Project) -> list[dict[str, Any]]:
     workers = ctx.session.scalars(select(Worker).where(Worker.project_id == project.id,
                                                        Worker.last_seen_at >= cutoff)).all()
     out = []
-    for role, info in TEAM.items():
+    for role, info in {**TEAM, **SUPPORTING}.items():
         config = ctx.session.scalar(select(AgentConfig).where(
             AgentConfig.project_id == project.id, AgentConfig.role == role)
-            .order_by(AgentConfig.version.desc()).limit(1))
+            .order_by(AgentConfig.version.desc()).limit(1)) if role in TEAM else None
         live = [w.capabilities.get(role) for w in workers if (w.capabilities.get(role) or {}).get("available")]
         offline_detail = next((w.capabilities.get(role, {}).get("detail") for w in workers
                                if role in w.capabilities), None)

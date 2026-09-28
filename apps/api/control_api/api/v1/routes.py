@@ -28,6 +28,7 @@ from control_api.db.session import get_session
 from control_api.domain.lifecycle import KANBAN_COLUMN_FOR_STAGE, KANBAN_COLUMNS
 from control_api.domain.permissions import Action, Principal
 from control_api.errors import Unprocessable
+from control_api.services import github_reviews as reviews_svc
 from control_api.services import orchestrator
 from control_api.services import projects as project_svc
 from control_api.services import setup as setup_svc
@@ -409,6 +410,23 @@ def task_qa(task_id: uuid.UUID, request: Request, session: Session = Depends(get
                      "title": d.title, "evidence": d.evidence, "updated_at": d.updated_at.isoformat()}
                     for d in defects],
     }
+
+
+@router.get("/tasks/{task_id}/pull-request")
+def task_pull_request(task_id: uuid.UUID, request: Request, session: Session = Depends(get_session),
+                      principal: Principal = Depends(current_principal)) -> dict[str, Any]:
+    """The ticket's draft pull request and GitHub Copilot's (advisory) review of it."""
+    ctx = make_ctx(request, session, principal)
+    task, _ = task_svc.load_task(ctx, task_id)
+    runs = session.scalars(select(Run).where(Run.task_id == task.id, Run.role == "DEVELOPER",
+                                             Run.parent_run_id.is_(None)).order_by(Run.created_at.desc())).all()
+    pr = next(((r.result or {}).get("pull_request") for r in runs if (r.result or {}).get("pull_request")), None)
+    if not pr:
+        return {"pull_request": None, "copilot": None}
+    public = {k: pr[k] for k in ("number", "url", "copilot_review_requested")}
+    copilot = (reviews_svc.copilot_review(request.app.state.review_source, pr)
+               if pr["copilot_review_requested"] else None)
+    return {"pull_request": public, "copilot": copilot}
 
 
 @router.get("/tasks/{task_id}/ba-brief")

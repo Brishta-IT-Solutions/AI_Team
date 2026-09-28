@@ -142,8 +142,9 @@ dialog { border: 1px solid var(--line); border-radius: 12px; padding: 20px; max-
 dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
 
 /* AI team */
-.team { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
-@media (max-width: 900px) { .team { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.team { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+@media (max-width: 1200px) { .team { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .team { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .member { padding: 12px 14px; }
 .log {
   margin: 8px 0 0; padding: 10px 12px; max-height: 280px; overflow: auto; background: var(--surface-2);

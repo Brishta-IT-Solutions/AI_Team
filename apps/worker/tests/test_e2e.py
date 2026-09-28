@@ -130,6 +130,7 @@ def stack(tmp_path_factory):
         "GEMINI_MODEL": "gemini-test", "ANTHROPIC_API_KEY": "fake-anthropic", "OPENAI_API_KEY": "fake-openai",
         "CLAUDE_BIN": os.path.join(HERE, "fakes", "claude"), "CODEX_BIN": os.path.join(HERE, "fakes", "codex"),
         "OLLAMA_URL": f"http://127.0.0.1:{fake_port}", "OLLAMA_MODEL": "",
+        "JUNIOR_ENGINE": "ollama",  # this loop exercises the Ollama junior; OpenCode has its own test
     })
     yield f"http://127.0.0.1:{api_port}/v1"
     server.should_exit = True

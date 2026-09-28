@@ -25,17 +25,17 @@ Status of each functional requirement and acceptance test against this codebase.
 | FR-08 | Kanban | Done (foundation) | Seven columns, badges not columns, drag and keyboard parity, denied moves explained. |
 | FR-09 | Ticket | Done (pilot) | All eight tabs: Overview, Requirements, UX, Code, QA, Runs, Costs, Audit. New, Done and Cancelled tickets can be deleted: hidden from the board, history kept. |
 | FR-10 | Requirements | Partial | Versions, stable AC IDs, blocking questions, approval with scope. **Gap:** version compare, structured draft editor (JSON import today). |
-| FR-11 | Code and QA screen | Partial | Branch, head/base, files, self-check output; criteria matrix, suites, defects, evidence freshness. **Gap:** diff view and PR links (need the Git broker). |
+| FR-11 | Code and QA screen | Partial | Branch, head/base, files, self-check output; criteria matrix, suites, defects, evidence freshness. Local pilots: draft PR link and GitHub Copilot's advisory review. **Gap:** diff view; PRs for non-pilot projects (Git broker). |
 | FR-12 | Runs and agents screen | Partial | Team panel and Runs tab: attempt, milestone, duration, logs, model, cost label, junior sub-runs. **Gap:** per-run cancel and resume buttons (ticket-level cancel/retry exist). |
 | FR-13 | Costs and audit screens | Partial | Costs tab separates API estimates, plan-covered, local and unknown. Audit filters. **Gap:** project-level cost reports and export. |
 | FR-14 | Lifecycle and transitions | Done (domain) | `domain/lifecycle.py`. Human-driven triggers wired; worker-driven triggers arrive with the job service. |
 | FR-15 | Approval rules | Partial | Requirements gate done; merge scope binding implemented but unreachable until QA exists. **Gap:** release approvals. |
 | FR-16 | Enforcement and release boundary | Partial | Deny-by-default at the API. **Gap:** broker and storage enforcement, release state machine. |
-| FR-17 | Git workflow | Partial | `feature/<key>/<id>` worktrees from the recorded base; worker commits and diffs; protected paths; optional push of feature branches only. **Gap:** draft PRs and GitHub branch protection via the broker. |
+| FR-17 | Git workflow | Partial | `feature/<key>/<id>` worktrees from the recorded base; worker commits and diffs; protected paths; push of feature branches only; draft PR per ticket for local pilots (never merged by the platform). **Gap:** GitHub branch protection and conditional merge via the broker. |
 | FR-18 | Independent QA and repairs | Done (local) | Codex in a separate detached worktree without developer reasoning; exact AC coverage; defects by signature; full retest of each repaired commit; three-cycle pause. |
 | FR-19 | Conditional merge | Not started | |
 | FR-20 | Common adapter contract | Done | Contracts plus adapters in `apps/worker/aitc_worker/adapters/`. |
-| FR-21 | Ollama routing | Done | Routed and patch-checked by the API; patches reviewed and applied by Claude Code, never committed by the junior. |
+| FR-21 | Ollama routing | Done | Routed and patch-checked by the API; patches reviewed and applied by Claude Code, never committed by the junior. Two junior engines: OpenCode (an agent with file tools only, settings forced over repository config) or Ollama directly. |
 | FR-22 | Data model | Partial | Adds runs, run events, QA reports (append-only), defects, reservations, workers. **Gap:** artifacts store, PRs, releases, notifications. |
 | FR-23 | API and events | Partial | Worker protocol (hello, claim, heartbeat, junior, results), team/runs/QA/brief reads. **Gap:** WebSocket, releases, GitHub webhook. |
 | FR-24 | Retry and recovery | Partial | 15 s heartbeats, 90 s run lease, reaping and fencing of lost workers, one repair attempt for invalid structured output, per-role timeouts, cancellation with grace period, client retries with backoff. **Gap:** restart reconciliation of provider side effects. |

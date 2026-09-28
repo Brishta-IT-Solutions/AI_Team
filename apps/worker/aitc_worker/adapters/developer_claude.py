@@ -12,8 +12,8 @@ import os
 import subprocess
 from typing import Any
 
-from aitc_worker import git, proc
-from aitc_worker.adapters import junior_ollama
+from aitc_worker import git, github, proc
+from aitc_worker.adapters import junior_ollama, junior_opencode
 from aitc_worker.adapters.base import Outcome, RunContext, parse_json_blob, run_checks, write_spec
 from aitc_worker.config import Config
 
@@ -103,12 +103,14 @@ def run(ctx: RunContext) -> Outcome:
         git.commit_all(worktree, f"{env['task_key']}: {env['title']}"[:72])
         head = git.head(worktree)
         base_sha = git.merge_base(worktree, base)
-        limitations = []
+        limitations: list[str] = []
+        pull_request = None
         wants_push = cfg.push_branches or (env.get("repository") or {}).get("push_feature_branches")
         if wants_push and git.git(repo, "remote", check=False):
             ctx.reporter.step(f"Pushing {env['branch']} to GitHub")
             try:  # the candidate stands without the push; you just won't see it on GitHub yet
                 git.push_feature_branch(worktree, env["branch"])
+                pull_request = _pull_request(ctx, limitations)
             except git.GitError as exc:
                 ctx.reporter.log(f"push failed: {exc}")
                 limitations.append(f"feature branch not pushed to GitHub: {str(exc)[-300:]}")
@@ -128,6 +130,7 @@ def run(ctx: RunContext) -> Outcome:
                            "known_limitations": limitations},
             "junior": junior_summary,
             "checks": [{"command_id": c["command_id"], "exit_code": c["exit_code"], "tail": c["tail"]} for c in checks],
+            "pull_request": pull_request,
         }, usage=usage, provider="claude_code", model=model)
     except InterruptedError:
         return Outcome.failed("cancelled", "run cancelled", usage=usage, provider="claude_code", model=model)
@@ -137,8 +140,46 @@ def run(ctx: RunContext) -> Outcome:
         git.remove_worktree(repo, worktree)
 
 
+def _pull_request(ctx: RunContext, limitations: list[str]) -> dict[str, Any] | None:
+    """A draft PR for the pushed branch, and a Copilot review request when that's switched on."""
+    env, cfg = ctx.envelope, ctx.config
+    target = github.slug((env.get("repository") or {}).get("clone_url") or "")
+    if not (target and cfg.github_token):
+        return None
+    owner, name = target
+    body = (f"Opened by the AI Software Team Control Center for **{env['task_key']}**.\n\n"
+            "Built by Claude Code and tested independently by Codex in the Control Center. "
+            "Merge only after the ticket's merge approval there.")
+    try:
+        pr = github.GitHub(cfg).draft_pull_request(
+            owner, name, head=env["branch"], base=env["base_branch"],
+            title=f"{env['task_key']}: {env['title']}"[:250], body=body)
+    except (github.GitHubError, OSError) as exc:
+        ctx.reporter.log(f"pull request not opened: {exc}")
+        limitations.append(f"draft pull request not opened: {str(exc)[-300:]}")
+        return None
+    pr["copilot_review_requested"] = False
+    if cfg.copilot_review:
+        try:
+            github.GitHub(cfg).request_copilot_review(owner, name, pr["number"])
+            pr["copilot_review_requested"] = True
+            ctx.reporter.log(f"asked GitHub Copilot to review {pr['url']}")
+        except (github.GitHubError, OSError) as exc:
+            limitations.append(f"GitHub Copilot review not requested: {str(exc)[-300:]}")
+    return pr
+
+
+def _junior_engine(cfg: Any) -> tuple[Any, Any, str]:
+    """(adapter, prompt, name) for junior work: OpenCode when available and not switched off."""
+    from aitc_worker.prompts import junior_agent_prompt, junior_prompt
+
+    if cfg.junior_engine != "ollama" and junior_opencode.availability(cfg)["available"]:
+        return junior_opencode, junior_agent_prompt, "OpenCode"
+    return junior_ollama, junior_prompt, "Ollama"
+
+
 def _delegate(ctx: RunContext, repo: str, worktree: str) -> list[dict[str, Any]]:
-    """Send Claude's delegations to the junior (Ollama) and stage accepted patches for review."""
+    """Send Claude's delegations to the junior (OpenCode or Ollama) and stage accepted patches for review."""
     path = os.path.join(worktree, ".aitc", "delegations.json")
     if not os.path.exists(path):
         return []
@@ -155,7 +196,7 @@ def _delegate(ctx: RunContext, repo: str, worktree: str) -> list[dict[str, Any]]
         return [{"accepted": False, "reasons": [problem]}]
     from datetime import UTC, datetime, timedelta
 
-    from aitc_worker.prompts import junior_prompt
+    engine, prompt_for, member = _junior_engine(ctx.config)
     deadline = (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
     routed = ctx.client.junior(ctx.run["run_id"], ctx.run["claim_token"],
                                [{**r, "deadline": deadline} for r in requested[:10] if isinstance(r, dict)])
@@ -167,9 +208,9 @@ def _delegate(ctx: RunContext, repo: str, worktree: str) -> list[dict[str, Any]]
             summary.append({"accepted": False, "reasons": item.get("reasons", [])})
             continue
         a = item["assignment"]
-        ctx.reporter.step(f"Ollama is doing junior task {i}: {a['task_type'].lower()}")
+        ctx.reporter.step(f"{member} is doing junior task {i}: {a['task_type'].lower()}")
         child_tree = os.path.join(ctx.config.work_dir, "junior", item["run_id"])
-        out = junior_ollama.run(ctx.config, model, a, junior_prompt, repo, start, child_tree)
+        out = engine.run(ctx.config, model, a, prompt_for, repo, start, child_tree)
         verdict = ctx.client.result(item["run_id"], item["claim_token"], outcome=out.outcome, payload=out.payload,
                                     usage=out.usage, errors=out.errors, provider=out.provider, model=out.model)
         entry = {"accepted": bool(verdict.get("accepted")), "reasons": verdict.get("reasons", []),

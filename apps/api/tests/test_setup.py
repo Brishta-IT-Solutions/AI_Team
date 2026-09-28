@@ -49,7 +49,8 @@ def test_setup_creates_an_active_local_pilot_with_the_team(api, remote, db):
     waived = [i for i in readiness["items"] if "waived" in i["detail"]]
     assert {i["key"] for i in waived} >= {"branch_protected", "required_checks", "baseline_tests"}
     team = api.get("product", f"/projects/{p['id']}/team").json()["members"]
-    assert [m["member"] for m in team] == ["Gemini", "Claude Code", "Codex", "Ollama"]
+    assert [m["member"] for m in team] == ["Gemini", "Claude Code", "Codex", "Ollama", "OpenCode",
+                                           "GitHub Copilot"]
     assert db.scalar(select(AuditEvent).where(AuditEvent.action == "project.setup.local_pilot"))
 
 

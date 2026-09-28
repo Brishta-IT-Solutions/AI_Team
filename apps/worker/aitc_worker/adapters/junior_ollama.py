@@ -74,7 +74,7 @@ def run(config: Config, model: str, assignment: dict[str, Any], prompt_for: Any,
     git.add_worktree(repo, worktree, detach_at=start)
     try:
         allowed = assignment["allowed_paths"]
-        prompt = prompt_for(assignment, _context(worktree, allowed))
+        prompt = prompt_for(assignment, _context(worktree, allowed))  # whole files in, whole files out
         res = httpx.post(f"{config.ollama_url}/api/generate", timeout=assignment.get("deadline_seconds", 300),
                          json={"model": model, "prompt": prompt, "stream": False, "format": FILES_SCHEMA,
                                "options": {"temperature": 0.2}})

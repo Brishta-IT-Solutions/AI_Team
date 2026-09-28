@@ -21,6 +21,19 @@ Only include files you create or change. Keep content complete, not partial.
 """
 
 
+def junior_agent_prompt(assignment: dict[str, Any]) -> str:
+    """For OpenCode, which edits files itself instead of replying with them."""
+    return f"""You are a careful junior developer. Do exactly this and nothing more:
+
+TASK TYPE: {assignment["task_type"]}
+EXPECTED OUTPUT: {assignment["expected_output"]}
+YOU MAY ONLY CREATE OR EDIT FILES UNDER: {", ".join(assignment["allowed_paths"])}
+
+Read what you need, then write the files. Don't touch anything else; changes outside those paths
+are discarded. Keep it simple and complete. Finish with one sentence saying what you changed.
+"""
+
+
 def junior_review_prompt(patches: list[dict[str, Any]]) -> str:
     listing = "\n".join(
         f"- {p['file']}: {p['task_type']} — {p['expected_output']}" for p in patches

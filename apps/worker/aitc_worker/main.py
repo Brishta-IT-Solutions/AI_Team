@@ -9,7 +9,8 @@ import traceback
 from dataclasses import replace
 from typing import Any
 
-from aitc_worker.adapters import ba_gemini, developer_claude, junior_ollama, qa_codex
+from aitc_worker import github
+from aitc_worker.adapters import ba_gemini, developer_claude, junior_ollama, junior_opencode, qa_codex
 from aitc_worker.adapters.base import Outcome, Reporter, RunContext
 from aitc_worker.client import ApiError, Client
 from aitc_worker.config import Config
@@ -23,7 +24,8 @@ log = logging.getLogger("aitc.worker")
 
 def capabilities(config: Config) -> dict[str, dict[str, Any]]:
     return {"BA": ba_gemini.availability(config), "DEVELOPER": developer_claude.availability(config),
-            "QA": qa_codex.availability(config), "JUNIOR": junior_ollama.availability(config)}
+            "QA": qa_codex.availability(config), "JUNIOR": junior_ollama.availability(config),
+            "OPENCODE": junior_opencode.availability(config), "REVIEWER": github.copilot_availability(config)}
 
 
 def execute(config: Config, client: Client, run: dict[str, Any]) -> dict[str, Any]:

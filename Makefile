@@ -10,7 +10,7 @@ setup:            ## Install API, worker and web dependencies
 	cd $(WEB) && npm install --no-audit --no-fund
 
 infra:            ## Start only Postgres in Docker (for running API and web natively)
-	docker compose up -d postgres
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
 
 migrate:
 	cd $(API) && .venv/bin/alembic upgrade head
