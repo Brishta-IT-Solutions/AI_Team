@@ -8,8 +8,28 @@ Browser ──► Control API (FastAPI) ──► PostgreSQL ──► outbox �
                   └──── results + leases ◄──┴──────────── Git broker ◄──────────┘
 ```
 
-Built today: Browser, Control API, PostgreSQL, outbox and relay primitive, lease fencing, contracts.
-Next: Celery/Redis job service, containerized workers, Git broker (sole holder of GitHub credentials), provider adapters, object storage for artifacts, WebSocket fan-out, Ollama local bridge.
+Built: Browser, Control API, PostgreSQL (state, outbox and run queue), worker with provider adapters, lease fencing.
+Next: Git broker (sole holder of GitHub credentials), object storage for artifacts, WebSocket fan-out.
+
+## The team loop
+
+```
+analyze ──► BA run (Gemini) ─────────────► REQUIREMENTS_APPROVAL ──► human approves
+                  ▲  manual: Antigravity brief ─► import ─┘                    │
+                                                                             ▼
+          ┌────────── DEVELOPER run (Claude Code) ◄── budget reserved + branch lease
+          │               │  optional: JUNIOR runs (Ollama) → patches → Claude reviews
+          │               ▼
+          │         DEV_REVIEW (worker-measured diff + approved checks)
+          │     fail ─┘      │ pass
+          │                  ▼
+          └── FIX_REQUIRED ◄─ QA run (Codex, separate worktree, exact commit)
+               (≤ 3 cycles)          │ all mandatory criteria and suites pass
+                                     ▼
+                              MERGE_APPROVAL ──► human (merge via Git broker: next)
+```
+
+Workers claim runs with `SELECT … FOR UPDATE SKIP LOCKED`, heartbeat every 15 seconds and hold a 90-second run lease. A silent worker is reaped: its run fails, its branch lease is released, and any late result is refused because its claim token no longer matches. Every result is re-validated by the API and applied as the agent role that produced it.
 
 ## Layers in `apps/api/control_api`
 
