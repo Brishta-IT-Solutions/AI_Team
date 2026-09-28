@@ -173,6 +173,7 @@ class Task(Base):
     head_sha: Mapped[str | None] = mapped_column(String(40))
     base_sha: Mapped[str | None] = mapped_column(String(40))
     current_qa_report_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    branch: Mapped[str | None] = mapped_column(String(255))
     repair_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     repair_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
     owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
@@ -353,3 +354,124 @@ class Budget(Base):
     period: Mapped[str] = mapped_column(String(16), nullable=False)  # e.g. 2026-09 or "*"
     cap: Mapped[Decimal] = mapped_column(Numeric(14, 6), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
+
+
+# ---------------------------------------------------------------- execution (vertical slice)
+
+
+class Run(Base):
+    """One execution of an agent role for a ticket (FR-02, FR-12, FR-20).
+
+    The envelope freezes everything the run was given. A worker claims a queued run,
+    heartbeats while it works, and submits one result. Child runs (junior work) hang
+    off a parent developer run.
+    """
+
+    __tablename__ = "runs"
+    __table_args__ = (
+        CheckConstraint("role IN ('BA','DEVELOPER','QA','JUNIOR')", name="role"),
+        CheckConstraint(
+            "status IN ('QUEUED','RUNNING','SUCCEEDED','FAILED','BLOCKED','CANCELLED')", name="status"
+        ),
+        # One active parent execution per ticket (FR-02).
+        Index("ux_one_active_parent_run", "task_id", unique=True,
+              postgresql_where=text("parent_run_id IS NULL AND status IN ('QUEUED','RUNNING')")),
+        Index("ix_runs_queue", "project_id", "role", "created_at",
+              postgresql_where=text("status = 'QUEUED'")),
+    )
+    id: Mapped[uuid.UUID] = _pk()
+    project_id: Mapped[uuid.UUID] = _project_fk()
+    task_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tasks.id"), nullable=False, index=True)
+    parent_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("runs.id"))
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="QUEUED")
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    envelope: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    worker_id: Mapped[str | None] = mapped_column(String(120))
+    claim_token: Mapped[str | None] = mapped_column(String(64))
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    milestone: Mapped[str | None] = mapped_column(String(200))
+    provider: Mapped[str | None] = mapped_column(String(40))
+    model: Mapped[str | None] = mapped_column(String(200))
+    result: Mapped[dict | None] = mapped_column(JSONB)
+    error: Mapped[dict | None] = mapped_column(JSONB)
+    usage: Mapped[dict | None] = mapped_column(JSONB)
+    cost: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))
+    cost_quality: Mapped[str] = mapped_column(String(24), nullable=False, default="UNKNOWN")
+    created_at: Mapped[datetime] = _ts()
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class RunEvent(Base):
+    __tablename__ = "run_events"
+    __table_args__ = (UniqueConstraint("run_id", "sequence"),)
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("runs.id"), nullable=False, index=True)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    type: Mapped[str] = mapped_column(String(20), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False, default="")  # sanitized
+    created_at: Mapped[datetime] = _ts()
+
+
+class QAReportRecord(Base):
+    """Immutable QA reports; a retest produces a new report (FR-18)."""
+
+    __tablename__ = "qa_reports"
+    id: Mapped[uuid.UUID] = _pk()
+    project_id: Mapped[uuid.UUID] = _project_fk()
+    task_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tasks.id"), nullable=False, index=True)
+    run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("runs.id"), nullable=False)
+    spec_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("requirement_versions.id"), nullable=False)
+    head_sha: Mapped[str] = mapped_column(String(40), nullable=False)
+    base_sha: Mapped[str] = mapped_column(String(40), nullable=False)
+    verdict: Mapped[str] = mapped_column(String(10), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = _ts()
+
+
+class Defect(Base):
+    """Keyed by ticket + normalized failure signature so retests update, not duplicate."""
+
+    __tablename__ = "defects"
+    __table_args__ = (UniqueConstraint("task_id", "signature"),)
+    id: Mapped[uuid.UUID] = _pk()
+    project_id: Mapped[uuid.UUID] = _project_fk()
+    task_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tasks.id"), nullable=False, index=True)
+    signature: Mapped[str] = mapped_column(String(64), nullable=False)
+    ac_id: Mapped[str | None] = mapped_column(String(24))
+    severity: Mapped[str] = mapped_column(String(10), nullable=False)
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="OPEN")
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    evidence: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    first_report_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("qa_reports.id"), nullable=False)
+    last_report_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("qa_reports.id"), nullable=False)
+    created_at: Mapped[datetime] = _ts()
+    updated_at: Mapped[datetime] = _ts()
+
+
+class Reservation(Base):
+    """Budget held before dispatch (FR-25); released with the run's measured cost."""
+
+    __tablename__ = "reservations"
+    __table_args__ = (CheckConstraint("status IN ('ACTIVE','RELEASED')", name="status"),)
+    id: Mapped[uuid.UUID] = _pk()
+    project_id: Mapped[uuid.UUID] = _project_fk()
+    task_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tasks.id"), nullable=False, index=True)
+    run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("runs.id"), unique=True, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 6), nullable=False)
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="ACTIVE")
+    created_at: Mapped[datetime] = _ts()
+
+
+class Worker(Base):
+    """Last known health of each worker process and the team members it can run."""
+
+    __tablename__ = "workers"
+    id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    project_id: Mapped[uuid.UUID] = _project_fk()
+    capabilities: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    version: Mapped[str | None] = mapped_column(String(40))
+    last_seen_at: Mapped[datetime] = _ts()

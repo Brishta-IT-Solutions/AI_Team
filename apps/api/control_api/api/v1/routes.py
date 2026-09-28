@@ -14,11 +14,12 @@ from control_api.api.v1.common import decode_cursor, encode_cursor, make_ctx, mu
 from control_api.auth import current_principal
 from control_api.config import get_settings
 from control_api.contracts import BASpecification
-from control_api.db.models import AuditEvent, OutboxEvent, Project, Task
+from control_api.db.models import AuditEvent, Defect, OutboxEvent, Project, QAReportRecord, Run, Task
 from control_api.db.session import get_session
 from control_api.domain.lifecycle import KANBAN_COLUMN_FOR_STAGE, KANBAN_COLUMNS
 from control_api.domain.permissions import Action, Principal
 from control_api.errors import Unprocessable
+from control_api.services import orchestrator
 from control_api.services import projects as project_svc
 from control_api.services import tasks as task_svc
 from control_api.services.outbox import envelope
@@ -323,3 +324,132 @@ def audit_log(project_id: uuid.UUID, request: Request, before: int | None = None
                    "created_at": e.created_at.isoformat()} for e in items],
         "next_cursor": items[-1].seq if len(rows) > n else None,
     }
+
+
+# ---------------------------------------------------------------- execution policy
+
+
+@router.put("/projects/{project_id}/execution-policy")
+def set_execution_policy(project_id: uuid.UUID, body: schemas.ExecutionPolicy, request: Request,
+                         session: Session = Depends(get_session),
+                         principal: Principal = Depends(current_principal)):
+    ctx = make_ctx(request, session, principal)
+
+    def run():
+        p = project_svc.set_execution_policy(
+            ctx, project_id, commands=[c.model_dump() for c in body.commands],
+            protected_paths=body.protected_paths, expected_version=body.expected_version)
+        return 200, {**_project_json(p), "policy": p.policy}
+    return mutate(request, session, principal, body.model_dump(mode="json"), run)
+
+
+# ---------------------------------------------------------------- team and runs (FR-12)
+
+
+@router.get("/projects/{project_id}/team")
+def team(project_id: uuid.UUID, request: Request, session: Session = Depends(get_session),
+         principal: Principal = Depends(current_principal)) -> dict[str, Any]:
+    ctx = make_ctx(request, session, principal)
+    project = project_svc.get_project(ctx, project_id)
+    return {"members": orchestrator.team_view(ctx, project), "policy": project.policy}
+
+
+@router.get("/tasks/{task_id}/runs")
+def task_runs(task_id: uuid.UUID, request: Request, session: Session = Depends(get_session),
+              principal: Principal = Depends(current_principal)) -> dict[str, Any]:
+    ctx = make_ctx(request, session, principal)
+    task, _ = task_svc.load_task(ctx, task_id)
+    runs = session.scalars(select(Run).where(Run.task_id == task.id).order_by(Run.created_at.desc())
+                           .limit(50)).all()
+    return {"items": [orchestrator.run_view(ctx, r, with_logs=True) for r in runs]}
+
+
+@router.get("/tasks/{task_id}/qa")
+def task_qa(task_id: uuid.UUID, request: Request, session: Session = Depends(get_session),
+            principal: Principal = Depends(current_principal)) -> dict[str, Any]:
+    ctx = make_ctx(request, session, principal)
+    task, _ = task_svc.load_task(ctx, task_id)
+    reports = session.scalars(select(QAReportRecord).where(QAReportRecord.task_id == task.id)
+                              .order_by(QAReportRecord.created_at.desc()).limit(20)).all()
+    defects = session.scalars(select(Defect).where(Defect.task_id == task.id)
+                              .order_by(Defect.status, Defect.created_at)).all()
+    return {
+        "current_report_id": str(task.current_qa_report_id) if task.current_qa_report_id else None,
+        "reports": [{"id": str(r.id), "verdict": r.verdict, "head_sha": r.head_sha, "base_sha": r.base_sha,
+                     "current": r.head_sha == task.head_sha and r.base_sha == task.base_sha,
+                     "payload": r.payload, "created_at": r.created_at.isoformat()} for r in reports],
+        "defects": [{"id": str(d.id), "ac_id": d.ac_id, "severity": d.severity, "status": d.status,
+                     "title": d.title, "evidence": d.evidence, "updated_at": d.updated_at.isoformat()}
+                    for d in defects],
+    }
+
+
+@router.get("/tasks/{task_id}/ba-brief")
+def ba_brief(task_id: uuid.UUID, request: Request, session: Session = Depends(get_session),
+             principal: Principal = Depends(current_principal)) -> dict[str, Any]:
+    ctx = make_ctx(request, session, principal)
+    task, project = task_svc.load_task(ctx, task_id)
+    return {"markdown": orchestrator.ba_brief(ctx, task, project)}
+
+
+# ---------------------------------------------------------------- worker protocol
+
+
+@router.post("/workers/hello")
+def worker_hello(body: schemas.WorkerHello, request: Request, session: Session = Depends(get_session),
+                 principal: Principal = Depends(current_principal)) -> dict[str, Any]:
+    ctx = make_ctx(request, session, principal)
+    orchestrator.record_worker(ctx, worker_id=body.worker_id, capabilities=body.capabilities,
+                               version=body.version)
+    session.commit()
+    return {"ok": True}
+
+
+@router.post("/workers/claim")
+def worker_claim(body: schemas.WorkerClaim, request: Request, session: Session = Depends(get_session),
+                 principal: Principal = Depends(current_principal)):
+    ctx = make_ctx(request, session, principal)
+
+    def run():
+        claimed = orchestrator.claim(ctx, worker_id=body.worker_id, roles=list(body.roles))
+        return 200, {"run": claimed}
+    return mutate(request, session, principal, body.model_dump(mode="json"), run)
+
+
+@router.post("/runs/{run_id}/heartbeat")
+def run_heartbeat(run_id: uuid.UUID, body: schemas.RunHeartbeat, request: Request,
+                  session: Session = Depends(get_session),
+                  principal: Principal = Depends(current_principal)) -> dict[str, Any]:
+    ctx = make_ctx(request, session, principal)
+    try:
+        out = orchestrator.heartbeat(ctx, run_id, claim_token=body.claim_token,
+                                     milestone=body.milestone, logs=body.logs)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    return out
+
+
+@router.post("/runs/{run_id}/junior")
+def run_junior(run_id: uuid.UUID, body: schemas.JuniorRequest, request: Request,
+               session: Session = Depends(get_session), principal: Principal = Depends(current_principal)):
+    ctx = make_ctx(request, session, principal)
+
+    def run():
+        return 200, {"items": orchestrator.request_junior(ctx, run_id, claim_token=body.claim_token,
+                                                         assignments=body.assignments)}
+    return mutate(request, session, principal, body.model_dump(mode="json"), run)
+
+
+@router.post("/runs/{run_id}/results")
+def run_result(run_id: uuid.UUID, body: schemas.RunResultBody, request: Request,
+               session: Session = Depends(get_session), principal: Principal = Depends(current_principal)):
+    ctx = make_ctx(request, session, principal)
+
+    def run():
+        out = orchestrator.submit_result(ctx, run_id, claim_token=body.claim_token, outcome=body.outcome,
+                                         payload=body.payload, usage=body.usage, errors=body.errors,
+                                         provider=body.provider, model=body.model)
+        return 200, out
+    return mutate(request, session, principal, body.model_dump(mode="json"), run)
