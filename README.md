@@ -48,7 +48,14 @@ The first build takes a few minutes. When the log shows `Uvicorn running`, open 
 
 ### Share it on your local network
 
-Anyone on the same network can use the Control Center from this computer.
+Anyone on the same network can use the Control Center from this computer. The quickest way is one command from the `AI_Team` folder, which sets an access code if you don't have one, starts everything and prints the address to share:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\share-on-lan.ps1     # Windows
+./scripts/share-on-lan.sh                                            # macOS / Linux
+```
+
+Or by hand:
 
 1. In `.env`, set a code people must enter first, e.g. `AITC_ACCESS_CODE=blue-falcon-42`, then run `docker compose up -d --build`.
 2. Find this computer's address: `ipconfig` on Windows (the *IPv4 Address*, e.g. `192.168.1.20`), or `ipconfig getifaddr en0` on a Mac.
