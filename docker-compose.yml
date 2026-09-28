@@ -1,0 +1,20 @@
+# Local infrastructure. The API and web app run natively (see Makefile) for fast iteration.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: aitc
+      POSTGRES_PASSWORD: aitc
+      POSTGRES_DB: aitc
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aitc"]
+      interval: 5s
+      retries: 10
+  redis:
+    # Reserved for the Celery job service (vertical-slice stage); unused by the foundation.
+    image: redis:7
+    ports: ["6379:6379"]
+volumes:
+  pgdata:

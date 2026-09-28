@@ -1,0 +1,67 @@
+export type Stage =
+  | "NEW" | "BA_ANALYSIS" | "REQUIREMENTS_APPROVAL" | "READY_FOR_DEV" | "DEVELOPING" | "DEV_REVIEW"
+  | "QA" | "FIX_REQUIRED" | "MERGE_APPROVAL" | "MERGING" | "DONE" | "CANCELLED";
+
+export type ExecutionStatus = "IDLE" | "QUEUED" | "RUNNING" | "BLOCKED" | "PAUSED" | "FAILED";
+
+export type Project = {
+  id: string; key: string; name: string; status: "DRAFT" | "ACTIVE" | "DISABLED" | "ARCHIVED";
+  classification: string; policy_version: number; version: number; description: string; created_at: string;
+};
+
+export type TaskCard = {
+  id: string; key: string; title: string; priority: "P0" | "P1" | "P2" | "P3"; stage: Stage;
+  execution_status: ExecutionStatus; version: number; column: string; status_reason: string | null;
+  repair_count: number; created_at: string; updated_at: string;
+};
+
+export type Board = { columns: { name: string; items: TaskCard[] }[] };
+
+export type PermittedAction = { command: string; allowed: boolean; reasons: string[] };
+
+export type AcceptanceCriterion = { id: string; statement: string; verification: string; mandatory: boolean };
+export type Question = { id: string; text: string; blocking: boolean; resolution: string | null };
+export type BASpec = {
+  goal: string;
+  stories: { id: string; as_a: string; i_want: string; so_that: string }[];
+  business_rules: { id: string; statement: string }[];
+  acceptance_criteria: AcceptanceCriterion[];
+  ux_flows: { id: string; name: string; steps: string[] }[];
+  edge_cases: string[];
+  dependencies: string[];
+  questions: Question[];
+};
+
+export type TaskView = {
+  task: TaskCard & {
+    project_id: string; project_key: string; description: string; current_spec_id: string;
+    approved_spec_id: string; head_sha: string | null; base_sha: string | null; repair_limit: number;
+    owner_id: string;
+  };
+  dependencies: { id: string; key: string; stage: Stage }[];
+  requirements: {
+    versions: { id: string; version: number; content_hash: string; source: string; created_by_kind: string;
+      provenance: Record<string, unknown>; created_at: string }[];
+    current: BASpec | null;
+    current_version: number | null;
+    approved_spec_id: string | null;
+    open_blocking_questions: Question[];
+    approval_scope_hash: string | null;
+  };
+  approvals: { id: string; gate: string; decision: string; scope_hash: string; human_id: string;
+    reason: string | null; supersedes_id: string; created_at: string }[];
+  permitted_actions: PermittedAction[];
+};
+
+export type AuditItem = {
+  seq: number; event_id: string; actor_kind: string; actor_id: string; action: string; object_type: string;
+  object_id: string | null; outcome: "ALLOWED" | "DENIED"; reason: string | null; correlation_id: string;
+  created_at: string;
+};
+
+export const STAGE_LABEL: Record<Stage, string> = {
+  NEW: "New", BA_ANALYSIS: "BA analysis", REQUIREMENTS_APPROVAL: "Awaiting requirements approval",
+  READY_FOR_DEV: "Ready for development", DEVELOPING: "Developing", DEV_REVIEW: "Developer self-check",
+  QA: "Independent QA", FIX_REQUIRED: "Fix required", MERGE_APPROVAL: "Awaiting merge approval",
+  MERGING: "Merging", DONE: "Done", CANCELLED: "Cancelled",
+};
