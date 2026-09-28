@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { use, useRef, useState } from "react";
+import { use, useCallback, useRef, useState } from "react";
 import { ApiError, api } from "@/lib/api";
-import { useResource } from "@/lib/useResource";
+import { useEventCursor, useResource } from "@/lib/useResource";
+import { AntigravityBrief, CodeTab, CostsTab, QATab, RunsTab, UXTab } from "@/components/work";
 import type { AuditItem, PermittedAction, TaskView } from "@/lib/types";
 import { STAGE_LABEL } from "@/lib/types";
 import { Elapsed, PriorityBadge, StatusBadge } from "@/components/badges";
@@ -12,18 +13,14 @@ import { Empty, ErrorState, Loading } from "@/components/states";
 const TABS = ["Overview", "Requirements", "UX", "Code", "QA", "Runs", "Costs", "Audit"] as const;
 type Tab = (typeof TABS)[number];
 
-const LATER: Partial<Record<Tab, string>> = {
-  UX: "UX artifacts arrive with the developer adapter (Claude Code).",
-  Code: "Branch, pull request, diff and CI evidence arrive with the Git broker.",
-  QA: "The criteria matrix, defects and evidence freshness arrive with the QA adapter (Codex).",
-  Runs: "Run attempts, milestones and sanitized logs arrive with the job service.",
-  Costs: "Usage, reservations and known-versus-unknown cost arrive with budget accounting.",
-};
 
 export default function TicketPage({ params }: { params: Promise<{ taskId: string }> }) {
   const { taskId } = use(params);
   const { data, error, loading, refresh } = useResource<TaskView>(`/tasks/${taskId}`);
   const [tab, setTab] = useState<Tab>("Overview");
+  // Committed events (a team member moving the ticket) refresh every open panel.
+  const onEvents = useCallback(() => window.dispatchEvent(new Event("aitc:refresh")), []);
+  useEventCursor(data?.task.project_id ?? null, onEvents);
 
   if (loading) return <Loading label="Loading ticket" />;
   if (error || !data) return error ? <ErrorState error={error} onRetry={refresh} /> : null;
@@ -58,7 +55,11 @@ export default function TicketPage({ params }: { params: Promise<{ taskId: strin
             {tab === "Overview" && <Overview view={data} />}
             {tab === "Requirements" && <Requirements view={data} onChange={refresh} />}
             {tab === "Audit" && <Audit projectId={t.project_id} taskId={t.id} />}
-            {LATER[tab] && <Empty title={`${tab} — not yet connected`}><p>{LATER[tab]}</p></Empty>}
+            {tab === "UX" && <UXTab view={data} />}
+            {tab === "Code" && <CodeTab view={data} />}
+            {tab === "QA" && <QATab taskId={t.id} />}
+            {tab === "Runs" && <RunsTab taskId={t.id} />}
+            {tab === "Costs" && <CostsTab taskId={t.id} />}
           </div>
         </div>
         <aside className="card pad" aria-label="Next actions">
@@ -160,6 +161,7 @@ function Requirements({ view, onChange }: { view: TaskView; onChange: () => Prom
           ))}</ul>
         </div>
       )}
+      {["BA_ANALYSIS", "REQUIREMENTS_APPROVAL"].includes(view.task.stage) && <AntigravityBrief taskId={view.task.id} />}
       <ImportDraft view={view} onDone={onChange} />
     </div>
   );
