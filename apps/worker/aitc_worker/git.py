@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import os
 import shutil
 import subprocess
@@ -15,8 +16,20 @@ class GitError(RuntimeError):
     pass
 
 
+def _env() -> dict[str, str]:
+    """Git's own environment. The GitHub token rides in a per-process header, never in a remote URL,
+    .git/config or the AI tools' environment."""
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if token:
+        basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+        env.update({"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "http.https://github.com/.extraheader",
+                    "GIT_CONFIG_VALUE_0": f"AUTHORIZATION: basic {basic}"})
+    return env
+
+
 def git(cwd: str, *args: str, check: bool = True) -> str:
-    proc = subprocess.run(["git", *IDENTITY, *args], cwd=cwd, capture_output=True, text=True)
+    proc = subprocess.run(["git", *IDENTITY, *args], cwd=cwd, capture_output=True, text=True, env=_env())
     if check and proc.returncode != 0:
         raise GitError(f"git {' '.join(args)}: {proc.stderr.strip() or proc.stdout.strip()}")
     return proc.stdout.strip()
@@ -30,7 +43,7 @@ def ensure_repo(repo_path: str, repo_url: str) -> str:
         return repo_path
     os.makedirs(os.path.dirname(repo_path), exist_ok=True)
     if repo_url:
-        subprocess.run(["git", "clone", repo_url, repo_path], check=True, capture_output=True, text=True)
+        git(os.path.dirname(repo_path), "clone", "--", repo_url, repo_path)
     else:
         demo_repo.create(repo_path)
     with open(os.path.join(repo_path, ".git", "info", "exclude"), "a") as f:

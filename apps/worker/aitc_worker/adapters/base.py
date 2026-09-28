@@ -52,6 +52,13 @@ class RunContext:
     def envelope(self) -> dict[str, Any]:
         return self.run["envelope"]
 
+    def repo(self) -> str:
+        """The run's repository, cloned on first use and fetched before every run."""
+        from aitc_worker import git
+
+        path, url = self.config.repo_for(self.envelope.get("repository"))
+        return git.ensure_repo(path, url)
+
 
 @dataclass
 class Outcome:

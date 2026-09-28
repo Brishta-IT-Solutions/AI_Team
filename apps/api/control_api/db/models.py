@@ -98,6 +98,9 @@ class Project(Base):
     policy_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     policy: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     task_seq: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Local pilot: GitHub branch enforcement is waived and shown as waived; humans merge by hand.
+    local_pilot: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False,
+                                              server_default=text("false"))
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = _ts()
 
@@ -113,6 +116,8 @@ class Repository(Base):
     owner: Mapped[str] = mapped_column(String(100), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     base_branch: Mapped[str] = mapped_column(String(255), nullable=False)
+    # https://github.com/<owner>/<name>.git the worker clones; None means the built-in demo repository.
+    clone_url: Mapped[str | None] = mapped_column(String(500))
     # Facts from the GitHub inspector; unknown until verified (never trusted from users).
     verification: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

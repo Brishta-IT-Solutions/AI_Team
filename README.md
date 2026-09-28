@@ -52,10 +52,18 @@ The first build takes a few minutes. When the log shows `Uvicorn running`, open 
 2. **Claude Code (Max plan):** on your computer run `claude setup-token`, then put the token in `CLAUDE_CODE_OAUTH_TOKEN`.
 3. **Codex (ChatGPT plan):** `docker compose run --rm worker codex login --device-auth` and follow the link.
 4. **Gemini:** paste a free AI Studio key into `GEMINI_API_KEY`, or skip it and use the Antigravity brief.
-5. **Ollama:** keep it running and pull a coding model, e.g. `ollama pull qwen2.5-coder`.
+5. **Ollama:** keep it running and pull a coding model: `ollama pull qwen3-coder`, then set `OLLAMA_MODEL=qwen3-coder` (on a smaller machine, `qwen2.5-coder:7b`).
 6. `docker compose up --build` again. The four cards at the top of the board turn green as each member comes online.
 
-By default the team works on a small built-in demo project. Set `AITC_REPO_URL` to point it at your own repository; it only ever writes `feature/*` branches.
+By default the team works on a small built-in demo project.
+
+### Add your own project
+
+1. Put a GitHub token in `.env` as `GITHUB_TOKEN` (a fine-grained token with *Contents: read and write* on the repository).
+2. Switch **Acting as** to *Administrator*, click **New project**, and enter the name, the GitHub repository, its branch and its test command (for example `npm test`). The Control Center checks it can reach the repository, then sets up the team, budgets and people in one step.
+3. Add the project's key to `AITC_PROJECTS` in `.env` (for example `AITC_PROJECTS=PORTAL,TASDEEQ`) and run `docker compose up -d worker`.
+
+New projects run as a **local pilot**: GitHub branch protection isn't verified until the Git broker exists, so those checks show as *waived*, never as passed. The team only pushes `feature/*` branches, and you review and merge them on GitHub yourself.
 
 Switch identity with **Acting as** in the header (development sign-in; OIDC replaces it). Try approving `PORTAL-2` as Product Lead — the gate refuses until its blocking question is resolved. The API and its interactive docs are at http://localhost:8000/docs.
 

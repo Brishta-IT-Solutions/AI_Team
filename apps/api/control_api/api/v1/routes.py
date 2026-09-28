@@ -14,13 +14,23 @@ from control_api.api.v1.common import decode_cursor, encode_cursor, make_ctx, mu
 from control_api.auth import current_principal
 from control_api.config import get_settings
 from control_api.contracts import BASpecification
-from control_api.db.models import AuditEvent, Defect, OutboxEvent, Project, QAReportRecord, Run, Task
+from control_api.db.models import (
+    AuditEvent,
+    Defect,
+    OutboxEvent,
+    Project,
+    QAReportRecord,
+    Repository,
+    Run,
+    Task,
+)
 from control_api.db.session import get_session
 from control_api.domain.lifecycle import KANBAN_COLUMN_FOR_STAGE, KANBAN_COLUMNS
 from control_api.domain.permissions import Action, Principal
 from control_api.errors import Unprocessable
 from control_api.services import orchestrator
 from control_api.services import projects as project_svc
+from control_api.services import setup as setup_svc
 from control_api.services import tasks as task_svc
 from control_api.services.outbox import envelope
 
@@ -32,9 +42,9 @@ def _page_limit(limit: int | None) -> int:
     return max(1, min(limit or s.page_size_default, s.page_size_max))
 
 
-def _project_json(p: Project) -> dict[str, Any]:
+def _project_json(p: Project, repo_url: str | None = None) -> dict[str, Any]:
     return {**project_svc.project_snapshot(p), "description": p.description,
-            "created_at": p.created_at.isoformat()}
+            "created_at": p.created_at.isoformat(), "repo_url": repo_url}
 
 
 def _task_card(t: Task) -> dict[str, Any]:
@@ -81,11 +91,28 @@ def create_project(body: schemas.ProjectCreate, request: Request,
     return mutate(request, session, principal, body.model_dump(mode="json"), run)
 
 
+@router.post("/projects/setup", status_code=201)
+def setup_project(body: schemas.ProjectSetup, request: Request, session: Session = Depends(get_session),
+                  principal: Principal = Depends(current_principal)):
+    """Create a local pilot project on its own GitHub repository, team included (FR-04)."""
+    ctx = make_ctx(request, session, principal)
+
+    def run():
+        p = setup_svc.setup_local_pilot(
+            ctx, key=body.key, name=body.name, description=body.description, repo_url=body.repo_url,
+            base_branch=body.base_branch, test_command=body.test_command,
+            members=[(m.subject, m.roles) for m in body.members], probe=request.app.state.remote_probe)
+        return 201, _project_json(p)
+    return mutate(request, session, principal, body.model_dump(mode="json"), run)
+
+
 @router.get("/projects/{project_id}")
 def get_project(project_id: uuid.UUID, request: Request, session: Session = Depends(get_session),
                 principal: Principal = Depends(current_principal)) -> dict[str, Any]:
     ctx = make_ctx(request, session, principal)
-    return _project_json(project_svc.get_project(ctx, project_id))
+    project = project_svc.get_project(ctx, project_id)
+    repo = session.scalar(select(Repository).where(Repository.project_id == project.id))
+    return _project_json(project, repo.clone_url if repo else None)
 
 
 @router.put("/projects/{project_id}/members")

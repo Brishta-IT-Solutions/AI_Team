@@ -187,6 +187,12 @@ def _base_envelope(task: Task, project: Project, role: str, run_id: uuid.UUID) -
     }
 
 
+def _repository(project: Project, repo: Repository) -> dict[str, Any]:
+    """Which codebase the worker checks out; no clone URL means the worker's own default."""
+    return {"project_key": project.key, "clone_url": repo.clone_url, "base_branch": repo.base_branch,
+            "push_feature_branches": bool(repo.clone_url)}
+
+
 def _create_run(ctx: Ctx, task: Task, project: Project, role: str, envelope: dict[str, Any],
                 reserve: Decimal | None) -> Run:
     attempt = (ctx.session.scalar(select(func.count()).select_from(Run).where(
@@ -248,7 +254,9 @@ def dispatch(ctx: Ctx, task: Task, project: Project, *, feedback: list[str] | No
             return None
         acs = ctx.session.scalars(select(AcceptanceCriterion).where(
             AcceptanceCriterion.spec_id == spec.id)).all()
+        repo = ctx.session.scalar(select(Repository).where(Repository.project_id == project.id))
         run = _create_run(octx, task, project, "QA", {
+            "repository": _repository(project, repo),
             "spec": spec.payload, "spec_version": spec.version, "spec_hash": spec.content_hash,
             "approved_ac_ids": sorted(a.stable_key for a in acs),
             "mandatory_ac_ids": sorted(a.stable_key for a in acs if a.mandatory),
@@ -304,6 +312,7 @@ def _dispatch_development(octx: Ctx, task: Task, project: Project, stage: Stage,
     run = _create_run(octx, task, project, "DEVELOPER", {
         "spec": spec.payload, "spec_version": spec.version, "spec_hash": spec.content_hash,
         "branch": branch, "base_branch": repo.base_branch, "head_sha": task.head_sha,
+        "repository": _repository(project, repo),
         "lease_token": grant.fencing_token, "repair_cycle": repair_cycle,
         # Only repairs after independent QA count toward the three-cycle limit (PRD §3).
         "counts_toward_repair_limit": bool(task.current_qa_report_id),

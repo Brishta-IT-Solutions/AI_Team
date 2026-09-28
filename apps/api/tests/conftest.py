@@ -102,8 +102,9 @@ class Api:
         return self.client.put(f"/v1{path}", headers=self._headers(who, key), json=body)
 
 
-def make_api(inspector=None) -> Api:
-    return Api(TestClient(create_app(inspector=inspector), raise_server_exceptions=False))
+def make_api(inspector=None, remote_probe=None) -> Api:
+    return Api(TestClient(create_app(inspector=inspector, remote_probe=remote_probe),
+                          raise_server_exceptions=False))
 
 
 @pytest.fixture

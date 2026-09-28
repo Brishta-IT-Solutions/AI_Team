@@ -21,6 +21,7 @@ services:
       AITC_DATABASE_URL: postgresql+psycopg://aitc:aitc@postgres:5432/aitc
       AITC_DEV_AUTH_ENABLED: "true"
       AITC_SEED: "true"  # demo users, project and tickets on first start
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}  # read access, to check new projects' repositories
     ports: ["8000:8000"]
     depends_on:
       postgres:
@@ -40,7 +41,7 @@ services:
         required: false
     environment:
       AITC_API_URL: http://api:8000
-      AITC_WORKER_TOKEN: dev-service:worker:PORTAL
+      AITC_PROJECTS: ${AITC_PROJECTS:-PORTAL}  # the projects the team works on
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
     extra_hosts: ["host.docker.internal:host-gateway"]  # reach Ollama on your computer
     volumes:

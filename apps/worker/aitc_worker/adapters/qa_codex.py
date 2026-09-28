@@ -154,7 +154,7 @@ def build_report(env: dict[str, Any], raw: dict[str, Any], checks: list[dict[str
 
 def run(ctx: RunContext) -> Outcome:
     env, cfg = ctx.envelope, ctx.config
-    repo = cfg.repo_path
+    repo = ctx.repo()
     worktree = os.path.join(cfg.work_dir, "qa", ctx.run["run_id"])
     usage: dict[str, Any] = {"quality": "UNKNOWN"}
     model = cfg.codex_model or "default"

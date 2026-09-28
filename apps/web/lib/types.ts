@@ -7,6 +7,7 @@ export type ExecutionStatus = "IDLE" | "QUEUED" | "RUNNING" | "BLOCKED" | "PAUSE
 export type Project = {
   id: string; key: string; name: string; status: "DRAFT" | "ACTIVE" | "DISABLED" | "ARCHIVED";
   classification: string; policy_version: number; version: number; description: string; created_at: string;
+  local_pilot: boolean; repo_url?: string | null;
 };
 
 export type TaskCard = {

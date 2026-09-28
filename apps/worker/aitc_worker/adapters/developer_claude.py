@@ -71,7 +71,7 @@ def _cost(first: float, second: float | None) -> float:
 
 def run(ctx: RunContext) -> Outcome:
     env, cfg = ctx.envelope, ctx.config
-    repo = cfg.repo_path
+    repo = ctx.repo()
     worktree = os.path.join(cfg.work_dir, "dev", ctx.run["run_id"])
     usage: dict[str, Any] = {"quality": "PROVIDER_ESTIMATE"}
     model = cfg.claude_model or "default"
@@ -88,7 +88,7 @@ def run(ctx: RunContext) -> Outcome:
         cost_b: float | None = None
         ctx.reporter.log((first.get("result") or "")[:500], "summary")
 
-        junior_summary = _delegate(ctx, worktree, base)
+        junior_summary = _delegate(ctx, repo, worktree)
         accepted = [j for j in junior_summary if j.get("accepted")]
         if accepted:
             ctx.reporter.step("Claude Code is reviewing the junior's patches")
@@ -103,8 +103,15 @@ def run(ctx: RunContext) -> Outcome:
         git.commit_all(worktree, f"{env['task_key']}: {env['title']}"[:72])
         head = git.head(worktree)
         base_sha = git.merge_base(worktree, base)
-        if cfg.push_branches and git.git(repo, "remote", check=False):
-            git.push_feature_branch(worktree, env["branch"])
+        limitations = []
+        wants_push = cfg.push_branches or (env.get("repository") or {}).get("push_feature_branches")
+        if wants_push and git.git(repo, "remote", check=False):
+            ctx.reporter.step(f"Pushing {env['branch']} to GitHub")
+            try:  # the candidate stands without the push; you just won't see it on GitHub yet
+                git.push_feature_branch(worktree, env["branch"])
+            except git.GitError as exc:
+                ctx.reporter.log(f"push failed: {exc}")
+                limitations.append(f"feature branch not pushed to GitHub: {str(exc)[-300:]}")
         spend = round(_cost(cost_a, cost_b), 6)
         if subscription():
             usage.update({"quality": "SUBSCRIPTION", "notional_cost_usd": spend})
@@ -118,7 +125,7 @@ def run(ctx: RunContext) -> Outcome:
             "submission": {"head_sha": head, "base_sha": base_sha,
                            "files_changed": git.changed_files(worktree, base_sha), "summary": summary,
                            "tests": [{k: c[k] for k in ("command_id", "exit_code", "artifact_ref")} for c in checks],
-                           "known_limitations": []},
+                           "known_limitations": limitations},
             "junior": junior_summary,
             "checks": [{"command_id": c["command_id"], "exit_code": c["exit_code"], "tail": c["tail"]} for c in checks],
         }, usage=usage, provider="claude_code", model=model)
@@ -130,7 +137,7 @@ def run(ctx: RunContext) -> Outcome:
         git.remove_worktree(repo, worktree)
 
 
-def _delegate(ctx: RunContext, worktree: str, base: str) -> list[dict[str, Any]]:
+def _delegate(ctx: RunContext, repo: str, worktree: str) -> list[dict[str, Any]]:
     """Send Claude's delegations to the junior (Ollama) and stage accepted patches for review."""
     path = os.path.join(worktree, ".aitc", "delegations.json")
     if not os.path.exists(path):
@@ -162,7 +169,7 @@ def _delegate(ctx: RunContext, worktree: str, base: str) -> list[dict[str, Any]]
         a = item["assignment"]
         ctx.reporter.step(f"Ollama is doing junior task {i}: {a['task_type'].lower()}")
         child_tree = os.path.join(ctx.config.work_dir, "junior", item["run_id"])
-        out = junior_ollama.run(ctx.config, model, a, junior_prompt, ctx.config.repo_path, start, child_tree)
+        out = junior_ollama.run(ctx.config, model, a, junior_prompt, repo, start, child_tree)
         verdict = ctx.client.result(item["run_id"], item["claim_token"], outcome=out.outcome, payload=out.payload,
                                     usage=out.usage, errors=out.errors, provider=out.provider, model=out.model)
         entry = {"accepted": bool(verdict.get("accepted")), "reasons": verdict.get("reasons", []),

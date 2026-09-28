@@ -18,7 +18,7 @@ Status of each functional requirement and acceptance test against this codebase.
 | FR-01 | Service topology | Partial | Next.js, FastAPI, Postgres, outbox, worker. **Deviation:** the run queue is Postgres (`SKIP LOCKED`) instead of Celery/Redis for the pilot; Redis is reserved. **Gap:** Git broker, object storage, WebSockets (cursor polling today). |
 | FR-02 | Durable orchestration | Partial | `services/orchestrator.py`: one active parent run per ticket (unique index), leases with fencing, dispatch by stage. **Gap:** per-project two-ticket and workspace eight-job limits. |
 | FR-03 | Sources of truth | Partial | Postgres authority. **Gap:** GitHub reconciliation, content-addressed artifact store, repo context exports. |
-| FR-04 | Setup workflow | Partial | Project, repository link via `RepositoryInspector`, readiness checklist. **Gap:** real GitHub App inspector, trusted commands, environment, sandbox baseline run. |
+| FR-04 | Setup workflow | Partial | Project, repository link via `RepositoryInspector`, readiness checklist. One-step **local pilot** setup (`services/setup.py`): checks the GitHub repo and branch are reachable, then sets up people, team, budgets and the approved test command; branch-protection, required-check, baseline and connection-test items show as *waived*. **Gap:** real GitHub App inspector, trusted commands, environment, sandbox baseline run. |
 | FR-05 | Agent configuration | Partial | Immutable versions; live capability and model reported by the worker on the Team panel. **Gap:** stored connection-test results per config version. |
 | FR-06 | Activation and retirement | Partial | Activation gate with exact missing items. **Gap:** disable, archive, credential revocation. |
 | FR-07 | Dashboard | Partial | Project list. **Gap:** stage counts, approvals, blockers, spend, health. |
@@ -47,7 +47,7 @@ Status of each functional requirement and acceptance test against this codebase.
 
 | AT | Covered by | Level |
 |---|---|---|
-| AT-01 | `test_activation_denied_without_branch_enforcement` | Full for setup; real GitHub facts pending |
+| AT-01 | `test_activation_denied_without_branch_enforcement`, `test_regular_projects_still_need_github_enforcement` | Full for setup; real GitHub facts pending. Local pilot projects waive it visibly (`test_setup.py`) |
 | AT-02 | `test_blocking_question_prevents_approval`, `test_blocking_questions_block_requirements_approval` | Full (no dispatch exists yet) |
 | AT-03 | `test_editing_approved_requirements_revokes_and_versions` | Full; job fencing covered by lease release |
 | AT-04 | `test_agents_cannot_approve_and_denials_are_audited`, permission matrix tests | API layer; broker layer pending |

@@ -26,6 +26,16 @@ class MembershipSet(In):
     roles: list[HumanRole] = Field(min_length=1)
 
 
+class ProjectSetup(In):
+    key: str = Field(pattern=r"^[A-Z][A-Z0-9]{1,9}$")
+    name: str = Field(min_length=1, max_length=160)
+    description: str = Field(default="", max_length=20_000)
+    repo_url: str = Field(min_length=1, max_length=300)
+    base_branch: str = Field(default="main", min_length=1, max_length=255, pattern=r"^[A-Za-z0-9._/-]+$")
+    test_command: str = Field(min_length=1, max_length=500)
+    members: list[MembershipSet] = Field(default_factory=list, max_length=50)
+
+
 class RepositoryLink(In):
     installation_id: int = Field(gt=0)
     repository_id: int = Field(gt=0)

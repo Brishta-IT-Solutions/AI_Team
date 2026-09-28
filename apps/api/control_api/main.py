@@ -13,6 +13,7 @@ from control_api.api.v1.routes import router
 from control_api.config import get_settings
 from control_api.errors import ApiError
 from control_api.services.projects import RepositoryInspector, UnverifiedInspector
+from control_api.services.setup import LsRemoteProbe, RemoteProbe
 
 log = logging.getLogger("control_api")
 _CORRELATION = re.compile(r"^[A-Za-z0-9\-]{8,64}$")
@@ -28,10 +29,11 @@ def _error(request: Request, status: int, code: str, message: str, *, retryable:
     return JSONResponse(body, status_code=status)
 
 
-def create_app(inspector: RepositoryInspector | None = None) -> FastAPI:
+def create_app(inspector: RepositoryInspector | None = None, remote_probe: RemoteProbe | None = None) -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="AI Software Team Control Center API", version="0.1.0")
     app.state.repository_inspector = inspector or UnverifiedInspector()
+    app.state.remote_probe = remote_probe or LsRemoteProbe(settings.github_token)
     app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True,
                        allow_methods=["GET", "POST", "PUT"],
                        allow_headers=["authorization", "content-type", "idempotency-key",

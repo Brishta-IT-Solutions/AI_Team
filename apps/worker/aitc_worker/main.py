@@ -6,9 +6,9 @@ import logging
 import threading
 import time
 import traceback
+from dataclasses import replace
 from typing import Any
 
-from aitc_worker import git
 from aitc_worker.adapters import ba_gemini, developer_claude, junior_ollama, qa_codex
 from aitc_worker.adapters.base import Outcome, Reporter, RunContext
 from aitc_worker.client import ApiError, Client
@@ -72,29 +72,40 @@ def step(config: Config, client: Client, roles: list[str]) -> bool:
     return True
 
 
+def seats(config: Config) -> list[tuple[str, Client]]:
+    """One project-scoped identity per project served (FR-16): (worker id, client)."""
+    if not config.projects:
+        return [(config.worker_id, Client(config))]
+    return [(f"{config.worker_id}:{key}", Client(config, token=f"dev-service:worker:{key}"))
+            for key in config.projects]
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     config = Config()
-    client = Client(config)
-    git.ensure_repo(config.repo_path, config.repo_url)
-    last_hello, roles = 0.0, []
-    log.info("worker %s starting against %s", config.worker_id, config.api_url)
+    served = seats(config)
+    last_hello, roles, caps = 0.0, [], {}
+    log.info("worker %s starting against %s for %s", config.worker_id, config.api_url,
+             ", ".join(config.projects) or "the project in AITC_WORKER_TOKEN")
     while True:
-        try:
-            if time.monotonic() - last_hello > HELLO_SECONDS:
-                caps = capabilities(config)
-                client.hello(config.worker_id, caps, VERSION)
-                roles = [r for r in ADAPTERS if caps[r]["available"]]
-                last_hello = time.monotonic()
-                log.info("team available: %s", ", ".join(roles) or "none — check your keys in .env")
-            if not step(config, client, roles):
-                time.sleep(config.poll_seconds)
-        except ApiError as exc:
-            log.warning("api error: %s", exc)
-            time.sleep(config.poll_seconds * 2)
-        except Exception:  # noqa: BLE001 - keep the worker alive; the API fences anything it held
-            log.exception("worker loop error")
-            time.sleep(config.poll_seconds * 2)
+        announce = time.monotonic() - last_hello > HELLO_SECONDS
+        if announce:
+            caps = capabilities(config)
+            roles = [r for r in ADAPTERS if caps[r]["available"]]
+            last_hello = time.monotonic()
+            log.info("team available: %s", ", ".join(roles) or "none — check your keys in .env")
+        busy = False
+        for worker_id, client in served:
+            try:
+                if announce:  # keeps each project's Team panel live
+                    client.hello(worker_id, caps, VERSION)
+                busy = step(replace(config, worker_id=worker_id), client, roles) or busy
+            except ApiError as exc:
+                log.warning("%s: api error: %s", worker_id, exc)
+            except Exception:  # noqa: BLE001 - keep the worker alive; the API fences anything it held
+                log.exception("%s: worker loop error", worker_id)
+        if not busy:
+            time.sleep(config.poll_seconds)
 
 
 if __name__ == "__main__":

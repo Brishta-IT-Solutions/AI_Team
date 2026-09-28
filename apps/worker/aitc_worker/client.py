@@ -18,9 +18,11 @@ class ApiError(RuntimeError):
 
 
 class Client:
-    def __init__(self, config: Config, transport: httpx.BaseTransport | None = None) -> None:
+    def __init__(self, config: Config, transport: httpx.BaseTransport | None = None,
+                 token: str | None = None) -> None:
         self.http = httpx.Client(base_url=config.api_url.rstrip("/") + "/v1", timeout=30,
-                                 headers={"authorization": f"Bearer {config.token}"}, transport=transport)
+                                 headers={"authorization": f"Bearer {token or config.token}"},
+                                 transport=transport)
 
     def _call(self, method: str, path: str, body: dict[str, Any] | None = None,
               key: str | None = None, attempts: int = 3) -> dict[str, Any]:

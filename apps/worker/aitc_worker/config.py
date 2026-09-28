@@ -15,9 +15,14 @@ def _env(name: str, default: str = "") -> str:
 class Config:
     api_url: str = field(default_factory=lambda: _env("AITC_API_URL", "http://localhost:8000"))
     token: str = field(default_factory=lambda: _env("AITC_WORKER_TOKEN", "dev-service:worker:PORTAL"))
+    # Project keys this worker serves, e.g. "PORTAL,TASDEEQ". Empty: just the one AITC_WORKER_TOKEN names.
+    projects: tuple[str, ...] = field(default_factory=lambda: tuple(
+        k.strip().upper() for k in _env("AITC_PROJECTS").split(",") if k.strip()))
     worker_id: str = field(default_factory=lambda: _env("AITC_WORKER_ID", f"worker-{socket.gethostname()}"))
     work_dir: str = field(default_factory=lambda: _env("AITC_WORK_DIR", "/workspace"))
     repo_url: str = field(default_factory=lambda: _env("AITC_REPO_URL"))
+    # Lets the worker (never the AI tools) clone private repos and push feature branches.
+    github_token: str = field(default_factory=lambda: _env("GITHUB_TOKEN"))
     push_branches: bool = field(default_factory=lambda: _env("AITC_PUSH_BRANCHES").lower() == "true")
     poll_seconds: float = field(default_factory=lambda: float(_env("AITC_POLL_SECONDS", "3")))
     # Team members
@@ -35,6 +40,12 @@ class Config:
     @property
     def repo_path(self) -> str:
         return os.path.join(self.work_dir, "repo")
+
+    def repo_for(self, repository: dict | None) -> tuple[str, str]:
+        """(local path, clone URL) for a run's repository; the default repo when it names none."""
+        if not repository or not repository.get("clone_url"):
+            return self.repo_path, self.repo_url
+        return os.path.join(self.work_dir, "repos", repository["project_key"]), repository["clone_url"]
 
     def child_env(self, *keep: str) -> dict[str, str]:
         """A minimal environment: each tool gets only its own credentials, never the others'."""

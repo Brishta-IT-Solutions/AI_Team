@@ -81,6 +81,16 @@ export default function ProjectBoard({ params }: { params: Promise<{ projectId: 
         <div>
           <p className="eyebrow"><Link href="/">Projects</Link> / {project.data?.key ?? "…"}</p>
           <h1>{project.data?.name ?? "Loading…"}</h1>
+          {project.data?.local_pilot && (
+            <p className="small muted" style={{ margin: "6px 0 0" }}>
+              <span className="badge tone-info" title="GitHub branch protection isn’t verified; you merge by hand">local pilot</span>{" "}
+              {project.data.repo_url && (
+                <a href={project.data.repo_url.replace(/\.git$/, "")} target="_blank" rel="noreferrer" className="mono">
+                  {project.data.repo_url.replace(/^https:\/\/github\.com\//, "").replace(/\.git$/, "")}
+                </a>
+              )}
+            </p>
+          )}
         </div>
         <div className="row">
           <span className="small muted" aria-live="polite">
@@ -91,7 +101,7 @@ export default function ProjectBoard({ params }: { params: Promise<{ projectId: 
         </div>
       </div>
 
-      <TeamPanel projectId={projectId} />
+      <TeamPanel projectId={projectId} projectKey={project.data?.key} />
 
       {notice && (
         <div className="notice" role="alert" style={{ marginBottom: 16 }}>

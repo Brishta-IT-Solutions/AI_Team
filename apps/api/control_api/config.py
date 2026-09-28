@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +17,8 @@ class Settings(BaseSettings):
     page_size_max: int = 100
     lease_ttl_seconds: int = 60
     max_active_tickets_per_project: int = 2
+    # Read access to project repositories for local pilot setup (a fine-grained token is enough).
+    github_token: str = Field(default="", validation_alias="GITHUB_TOKEN")
 
 
 @lru_cache

@@ -32,7 +32,7 @@ def project_snapshot(p: Project) -> dict[str, Any]:
     return {
         "id": str(p.id), "key": p.key, "name": p.name, "status": p.status,
         "classification": p.classification, "policy_version": p.policy_version,
-        "version": p.version,
+        "version": p.version, "local_pilot": p.local_pilot,
     }
 
 
@@ -219,31 +219,50 @@ class ReadinessItem:
     detail: str
 
 
+# In a local pilot, GitHub enforcement can't be verified without the Git broker. These checks
+# are waived — never reported as passed — and humans merge by hand; the team only writes
+# feature/* branches. Every other project must pass them all (AT-01).
+LOCAL_PILOT_WAIVED = ("branch_protected", "requires_up_to_date_checks", "required_checks", "baseline_tests")
+
+
+def _waived(key: str, label: str) -> ReadinessItem:
+    return ReadinessItem(key, True, f"{label}: waived (local pilot; you merge by hand)")
+
+
 def activation_readiness(ctx: Ctx, project: Project) -> list[ReadinessItem]:
     s = ctx.session
     items: list[ReadinessItem] = []
     repo = s.scalar(select(Repository).where(Repository.project_id == project.id))
     facts = repo.verification if repo else {}
+    pilot = project.local_pilot
 
     def fact(key: str, label: str) -> None:
+        if pilot and key in LOCAL_PILOT_WAIVED:
+            items.append(_waived(key, label))
+            return
         value = facts.get(key)
         detail = "verified" if value is True else ("not verified" if value is None else "failed")
         items.append(ReadinessItem(key, value is True, f"{label}: {detail}"))
 
     items.append(ReadinessItem("repository_linked", repo is not None,
                                "repository linked" if repo else "no repository linked"))
-    fact("installation_access", "GitHub App installation access")
+    fact("installation_access", "repository reachable with the GitHub token" if pilot
+         else "GitHub App installation access")
     fact("branch_exists", "target branch exists")
     fact("branch_protected", "target branch protection")
     fact("requires_up_to_date_checks", "up-to-date checks or merge queue enforced")
-    items.append(ReadinessItem(
-        "required_checks", bool(facts.get("required_checks")),
-        "required checks configured" if facts.get("required_checks")
-        else "no required status checks on target branch"))
-    items.append(ReadinessItem(
-        "baseline_tests", facts.get("baseline_tests_passed") is True,
-        "baseline tests passed in sandbox" if facts.get("baseline_tests_passed") is True
-        else "baseline tests have not passed in sandbox"))
+    if pilot:
+        items.append(_waived("required_checks", "required status checks"))
+        items.append(_waived("baseline_tests", "baseline tests in sandbox"))
+    else:
+        items.append(ReadinessItem(
+            "required_checks", bool(facts.get("required_checks")),
+            "required checks configured" if facts.get("required_checks")
+            else "no required status checks on target branch"))
+        items.append(ReadinessItem(
+            "baseline_tests", facts.get("baseline_tests_passed") is True,
+            "baseline tests passed in sandbox" if facts.get("baseline_tests_passed") is True
+            else "baseline tests have not passed in sandbox"))
 
     configured = set(s.scalars(select(AgentConfig.role).where(
         AgentConfig.project_id == project.id)).all())
@@ -254,6 +273,9 @@ def activation_readiness(ctx: Ctx, project: Project) -> list[ReadinessItem]:
         passed = bool(latest and (latest.connection_test or {}).get("passed") is True)
         detail = (f"{role} agent not configured" if role.value not in configured
                   else f"{role} agent connection test " + ("passed" if passed else "not passed"))
+        if pilot and latest is not None and not passed:
+            # The worker reports each member's live readiness on the Team panel instead.
+            passed, detail = True, f"{role} agent connection test: waived (local pilot; see the Team panel)"
         items.append(ReadinessItem(f"agent_{role.value.lower()}", passed, detail))
 
     scopes = set(s.scalars(select(Budget.scope).where(Budget.project_id == project.id)).all())
