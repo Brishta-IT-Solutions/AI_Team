@@ -31,6 +31,25 @@ services:
     ports: ["3000:3000"]
     depends_on: [api]
 
+  worker:
+    # Runs the AI team: Gemini (BA), Claude Code (developer), Codex (QA), Ollama (junior).
+    # Keys come from .env — see .env.example. Members without keys simply stay offline.
+    build: ./apps/worker
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      AITC_API_URL: http://api:8000
+      AITC_WORKER_TOKEN: dev-service:worker:PORTAL
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+    extra_hosts: ["host.docker.internal:host-gateway"]  # reach Ollama on your computer
+    volumes:
+      - workspace:/workspace
+      # Codex sign-in with your ChatGPT plan lives here:
+      #   docker compose run --rm worker codex login --device-auth
+      - codex-home:/home/node/.codex
+    depends_on: [api]
+
   redis:
     # Reserved for the Celery job service (next stage); not started by default.
     image: redis:7
@@ -39,3 +58,5 @@ services:
 
 volumes:
   pgdata:
+  workspace:
+  codex-home:

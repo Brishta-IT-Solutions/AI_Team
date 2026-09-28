@@ -39,6 +39,36 @@ jobs:
       - name: Tests
         run: .venv/bin/python -m pytest
 
+  worker:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: aitc
+          POSTGRES_PASSWORD: aitc
+          POSTGRES_DB: aitc_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U aitc" --health-interval 5s --health-retries 10
+    env:
+      AITC_ENV: test
+      AITC_DATABASE_URL: postgresql+psycopg://aitc:aitc@localhost:5432/aitc_test
+    defaults:
+      run:
+        working-directory: apps/worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: uv venv .venv --python 3.11 && uv pip install -p .venv -e ".[dev]" -e ../api uvicorn
+      - name: Lint
+        run: .venv/bin/ruff check .
+      - name: End-to-end team loop (real API, worker and git; stand-in AI CLIs)
+        run: .venv/bin/python -m pytest
+
   web:
     runs-on: ubuntu-latest
     defaults:
