@@ -19,6 +19,7 @@ from control_api.db.models import (
     AcceptanceCriterion,
     Approval,
     Project,
+    QAReportRecord,
     RequirementVersion,
     Task,
     TaskDependency,
@@ -43,7 +44,7 @@ from control_api.domain.lifecycle import (
 )
 from control_api.domain.permissions import Action, authorize
 from control_api.errors import Conflict, NotFound, Unprocessable
-from control_api.services import leases
+from control_api.services import leases, orchestrator
 from control_api.services.audit import audit
 from control_api.services.context import Ctx
 from control_api.services.outbox import emit
@@ -56,7 +57,7 @@ def snapshot(t: Task) -> dict[str, Any]:
         "id": str(t.id), "key": t.key, "stage": t.stage, "execution_status": t.execution_status,
         "version": t.version, "current_spec_id": str(t.current_spec_id or ""),
         "approved_spec_id": str(t.approved_spec_id or ""), "head_sha": t.head_sha,
-        "base_sha": t.base_sha, "repair_count": t.repair_count, "repair_limit": t.repair_limit,
+        "base_sha": t.base_sha, "branch": t.branch, "repair_count": t.repair_count, "repair_limit": t.repair_limit,
         "priority": t.priority, "title": t.title,
     }
 
@@ -157,15 +158,24 @@ def gather_facts(ctx: Ctx, task: Task, project: Project, reason: str | None = No
         dependencies_done=deps_open == 0,
         repair_count=task.repair_count,
         repair_limit=task.repair_limit,
-        # Populated by the dispatcher, Git broker and QA pipeline (vertical-slice stage).
+        # Reserved and leased by the orchestrator at the moment it dispatches.
         budget_reserved=False,
         lease_acquired=False,
-        qa_mandatory_all_pass=False,
-        qa_evidence_current=False,
-        ci_required_pass=False,
+        **_qa_facts(ctx, task),
         merge_confirmed_by_github=False,
+        merge_executor_available=False,  # arrives with the Git broker
         pending_external_effects=False,
     )
+
+
+def _qa_facts(ctx: Ctx, task: Task) -> dict[str, bool]:
+    """QA evidence is current only when the latest report tested exactly this head and base."""
+    report = ctx.session.get(QAReportRecord, task.current_qa_report_id) if task.current_qa_report_id else None
+    passed = report is not None and report.verdict == "PASS"
+    current = report is not None and report.head_sha == task.head_sha and report.base_sha == task.base_sha
+    # Local mode: the mandatory suites QA ran on this head stand in for required CI.
+    return {"qa_mandatory_all_pass": passed, "qa_evidence_current": current,
+            "ci_required_pass": passed and current}
 
 
 def _refuse(decision: Decision) -> Conflict:
@@ -248,6 +258,7 @@ def run_command(
         _check_version(task, expected_version)
         apply_transition(ctx, task, project, Trigger.START_ANALYSIS,
                          gather_facts(ctx, task, project, reason), reason=reason)
+        orchestrator.dispatch(ctx, task, project)
         return task
 
     if command == "request_changes":
@@ -261,6 +272,7 @@ def run_command(
         _check_version(task, expected_version)
         apply_transition(ctx, task, project, Trigger.CANCEL,
                          gather_facts(ctx, task, project, reason), reason=reason)
+        orchestrator.cancel_active_runs(ctx, task, project, reason or "ticket cancelled")
         fenced = leases.release(ctx.session, task_id=task.id, reason="CANCELLED")
         _revoke(ctx, task, project, {Gate.REQUIREMENTS, Gate.MERGE}, "ticket cancelled")
         audit(ctx.session, ctx.principal, action="task.cancel.cleanup", object_type="task",
@@ -306,6 +318,7 @@ def run_command(
          aggregate_version=task.version,
          type={"resume": "task.resumed", "retry": "task.retried"}[command],
          payload=snapshot(task))
+    orchestrator.dispatch(ctx, task, project, feedback=[reason])
     return task
 
 
@@ -352,6 +365,8 @@ def submit_requirements(
                                                      "content_hash": content_hash},
           policy_version=project.policy_version, details={"source": source,
                                                           "task_id": str(task.id)})
+    # A newer spec supersedes queued BA work and fences any development or QA in flight.
+    orchestrator.cancel_active_runs(ctx, task, project, f"superseded by requirements v{next_version}")
     if stage in PRE_MERGE_STAGES and stage is not Stage.REQUIREMENTS_APPROVAL:
         # An approved baseline changed: revoke, fence obsolete work, re-enter analysis (AT-03).
         _revoke(ctx, task, project, {Gate.REQUIREMENTS, Gate.MERGE},
@@ -463,6 +478,8 @@ def decide_gate(
           details={"scope_hash": expected_hash, "scope": scope, "task_id": str(task.id)})
     apply_transition(ctx, task, project, trigger, facts, reason=reason,
                      details={"approval_id": str(approval.id), "gate": gate.value})
+    # Approval starts development; requested changes go back to the BA or the developer.
+    orchestrator.dispatch(ctx, task, project, feedback=[reason] if reason and not approving else None)
     return task
 
 
