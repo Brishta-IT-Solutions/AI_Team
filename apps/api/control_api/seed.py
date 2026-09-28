@@ -97,6 +97,11 @@ def main() -> None:
         for scope, cap in [("PROJECT_MONTH", "500"), ("TICKET", "60"), ("RUN", "15")]:
             projects.set_budget(ctx("admin"), p.id, scope=scope, period="*", cap=Decimal(cap))
         s.commit()
+        # The demo repository's own test command, approved like any other (FR-04).
+        projects.set_execution_policy(ctx("eng"), p.id, expected_version=p.version, protected_paths=[],
+                                      commands=[{"id": "test", "argv": ["npm", "test"],
+                                                 "timeout_seconds": 300, "required": True}])
+        s.commit()
         projects.activate(ctx("admin"), p.id, expected_version=p.version)
         s.commit()
 

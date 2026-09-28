@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from control_api.config import get_settings
-from control_api.db.models import Membership, User
+from control_api.db.models import Membership, Project, User
 from control_api.db.session import get_session
 from control_api.domain.permissions import AgentRole, HumanRole, Principal, PrincipalKind
 from control_api.errors import Unauthenticated
@@ -33,6 +33,19 @@ def load_human(session: Session, user: User) -> Principal:
         workspace_admin=user.workspace_admin,
         project_roles={str(m.project_id): frozenset(HumanRole(r) for r in m.roles) for m in rows},
     )
+
+
+def _project_ref(session: Session, ref: str) -> str | None:
+    """Accept a project UUID or key, so a worker can be configured with just "PORTAL"."""
+    if not ref:
+        return None
+    try:
+        return str(uuid.UUID(ref))
+    except ValueError:
+        project_id = session.scalar(select(Project.id).where(Project.key == ref.upper()))
+        if project_id is None:
+            raise Unauthenticated("unknown project") from None
+        return str(project_id)
 
 
 def _parse_dev_token(session: Session, token: str) -> Principal:
@@ -56,11 +69,12 @@ def _parse_dev_token(session: Session, token: str) -> Principal:
             scoped_project_id=project_id,
         )
     if kind == "dev-service":
-        name, _, project_id = rest.partition(":")
+        name, _, project_ref = rest.partition(":")
         if not name:
             raise Unauthenticated("malformed service token")
         return Principal(
-            kind=PrincipalKind.SERVICE, id=f"service:{name}", scoped_project_id=project_id or None
+            kind=PrincipalKind.SERVICE, id=f"service:{name}",
+            scoped_project_id=_project_ref(session, project_ref),
         )
     raise Unauthenticated("unsupported token")
 

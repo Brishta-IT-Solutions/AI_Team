@@ -126,9 +126,9 @@ def project(api: Api) -> dict:
     for role, provider in {"BA": "gemini", "DEVELOPER": "claude_code", "QA": "codex",
                            "JUNIOR": "ollama"}.items():
         assert api.post("admin", f"/projects/{pid}/agents", agent_body(role, provider)).status_code == 201
-    for scope in ("PROJECT_MONTH", "TICKET", "RUN"):
+    for scope, cap in (("PROJECT_MONTH", "500"), ("TICKET", "60"), ("RUN", "5")):
         assert api.put("admin", f"/projects/{pid}/budgets",
-                       {"scope": scope, "cap": "100"}).status_code == 200
+                       {"scope": scope, "cap": cap}).status_code == 200
     mark_connection_tests_passed(pid)
     r = api.post("admin", f"/projects/{pid}/activate", {"expected_version": p["version"]})
     assert r.status_code == 200, r.json()

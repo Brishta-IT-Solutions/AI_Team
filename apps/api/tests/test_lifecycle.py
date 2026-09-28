@@ -18,7 +18,7 @@ OPEN = GuardFacts(
     spec_immutable=True, dependencies_done=True, budget_reserved=True, lease_acquired=True,
     scope_valid=True, self_checks_passed=True, qa_mandatory_all_pass=True,
     qa_evidence_current=True, functional_failure_with_defects=True, ci_required_pass=True,
-    merge_confirmed_by_github=True,
+    merge_confirmed_by_github=True, merge_executor_available=True,
 )
 
 FRD_TABLE = [

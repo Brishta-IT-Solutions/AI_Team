@@ -85,3 +85,50 @@ class ApprovalBody(In):
     scope_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     expected_version: int
     reason: str | None = Field(default=None, max_length=4000)
+
+
+class CommandSpec(In):
+    id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,39}$")
+    argv: list[str] = Field(min_length=1, max_length=20)
+    timeout_seconds: int = Field(default=600, ge=10, le=3600)
+    required: bool = True
+
+
+class ExecutionPolicy(In):
+    """Engineering-approved commands (argv, never a shell string) and protected paths (FR-04)."""
+
+    commands: list[CommandSpec] = Field(max_length=10)
+    protected_paths: list[str] = Field(default_factory=list, max_length=50)
+    expected_version: int
+
+
+class WorkerHello(In):
+    worker_id: str = Field(pattern=r"^[A-Za-z0-9._:-]{1,120}$")
+    version: str | None = Field(default=None, max_length=40)
+    capabilities: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
+class WorkerClaim(In):
+    worker_id: str = Field(pattern=r"^[A-Za-z0-9._:-]{1,120}$")
+    roles: list[Literal["BA", "DEVELOPER", "QA"]] = Field(min_length=1)
+
+
+class RunHeartbeat(In):
+    claim_token: str = Field(min_length=16, max_length=64)
+    milestone: str | None = Field(default=None, max_length=200)
+    logs: list[dict[str, Any]] = Field(default_factory=list, max_length=200)
+
+
+class JuniorRequest(In):
+    claim_token: str = Field(min_length=16, max_length=64)
+    assignments: list[dict[str, Any]] = Field(min_length=1, max_length=10)
+
+
+class RunResultBody(In):
+    claim_token: str = Field(min_length=16, max_length=64)
+    outcome: Literal["SUCCEEDED", "FAILED", "BLOCKED"]
+    payload: dict[str, Any] = Field(default_factory=dict)
+    usage: dict[str, Any] = Field(default_factory=dict)
+    errors: list[dict[str, Any]] = Field(default_factory=list, max_length=20)
+    provider: str | None = Field(default=None, max_length=40)
+    model: str | None = Field(default=None, max_length=200)
