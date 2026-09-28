@@ -47,6 +47,10 @@ function newKey(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+function unreachable(message: string): ApiError {
+  return new ApiError(0, { code: "network", message, retryable: true, correlation_id: null, field_errors: {} });
+}
+
 async function request<T>(method: string, path: string, body?: unknown, idempotencyKey?: string): Promise<T> {
   const headers: Record<string, string> = {
     authorization: `Bearer dev-human:${getSubject()}`,
@@ -57,15 +61,15 @@ async function request<T>(method: string, path: string, body?: unknown, idempote
   try {
     res = await fetch(`${API_URL}/v1${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
   } catch {
-    throw new ApiError(0, {
-      code: "network",
-      message: "Control API is unreachable. Check that it is running.",
-      retryable: true,
-      correlation_id: null,
-      field_errors: {},
-    });
+    throw unreachable("The Control Center isn't responding. Check that it's running on the host computer.");
   }
-  const json = await res.json().catch(() => ({}));
+  const parsed = await res.json().then((j) => ({ ok: true, j }), () => ({ ok: false, j: {} }));
+  const json = parsed.j;
+  if (!parsed.ok && res.status >= 500) {
+    // The web app answered but couldn't reach the API behind it.
+    throw unreachable("The web app can't reach the Control API. On the host computer run " +
+      "`docker compose ps` to check the api container is up, and `docker compose logs api` to see why not.");
+  }
   if (res.status === 401 && (json as ApiErrorBody).code === "access_code_required") {
     window.location.assign(`/access?next=${encodeURIComponent(window.location.pathname)}`);
   }
